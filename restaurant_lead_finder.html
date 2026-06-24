@@ -775,14 +775,6 @@ select { background: var(--surface2); border: 1px solid var(--border); border-ra
         <div class="stat"><div class="v" id="statSel">0</div><div class="l">selected</div></div>
         <div class="stat"><div class="v" id="statLeads">0</div><div class="l">leads found</div></div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:var(--fg)">
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
-          <input type="checkbox" id="scanIg" checked style="cursor:pointer"> Instagram
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
-          <input type="checkbox" id="scanTt" style="cursor:pointer"> TikTok
-        </label>
-      </div>
       <div class="btn-row" style="margin-bottom:6px">
         <button class="btn" onclick="clearSel()">Clear</button>
         <button class="btn btn-p" id="scanBtn" onclick="startScan()" disabled>Scan selected</button>
@@ -1204,8 +1196,8 @@ async function startScan(debugMode=false){
         }
       }
 
-      const doIg = document.getElementById('scanIg')?.checked !== false;
-      const doTt = document.getElementById('scanTt')?.checked === true;
+      const doIg = true;
+      const doTt = true;
 
       // Strip location suffixes like "- St. Augustine" or "| Doral" before name searches
       const searchName = place.name.replace(/\s*[-|–]\s*.{3,}$/, '').trim();
