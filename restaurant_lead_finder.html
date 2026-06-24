@@ -674,13 +674,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
   --accent: #6c63ff; --hot: #ff5f5f; --warm: #f5a623; --cold: #4ade80;
 }
 body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-header { display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 52px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.logo { font-size: 15px; font-weight: 700; }
+header { display: flex; align-items: center; gap: 8px; padding: 0 14px; height: 48px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.logo { font-size: 15px; font-weight: 700; white-space: nowrap; }
 .logo span { color: var(--accent); }
 header input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; padding: 5px 10px; outline: none; }
 header input:focus { border-color: var(--accent); }
 #apiKeyInput { width: 230px; }
 #cityInput { width: 140px; }
+#settingsPanel { display:none; position:absolute; top:48px; right:0; left:0; z-index:9999; background:var(--surface); border-bottom:1px solid var(--border); padding:10px 16px; display:none; gap:16px; flex-wrap:wrap; align-items:center; }
+#settingsPanel label { font-size:10px; color:var(--muted); font-weight:700; letter-spacing:.04em; text-transform:uppercase; display:flex; flex-direction:column; gap:4px; }
+#settingsPanel input { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:12px; padding:5px 10px; outline:none; width:220px; }
+#settingsPanel input:focus { border-color:var(--accent); }
 .btn { padding: 5px 13px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text); }
 .btn:hover { opacity: .8; }
 .btn-p { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -743,20 +747,21 @@ select { background: var(--surface2); border: 1px solid var(--border); border-ra
 <body>
 <header>
   <div class="logo">Lead<span>Scout</span></div>
-  <input id="cityInput" type="text" placeholder="City, e.g. Miami, FL" value="Miami, FL"/>
+  <input id="cityInput" type="text" placeholder="City, e.g. Miami, FL" value="Miami, FL" style="width:160px"/>
   <button class="btn" onclick="goToCity()">Go</button>
-  <span style="color:var(--muted);font-size:11px">API Key</span>
-  <input id="apiKeyInput" type="password" placeholder="AIza... (for scanning)"/>
-  <span style="color:var(--muted);font-size:11px;margin-left:8px">RapidAPI Key</span>
-  <input id="rapidApiKeyInput" type="password" placeholder="RapidAPI key" style="width:200px"/>
-  <span style="color:var(--muted);font-size:11px;margin-left:8px">IG Cookie</span>
-  <input id="igCookieInput" type="password" placeholder="sessionid=... (optional)" style="width:180px"/>
-  <span style="color:var(--muted);font-size:11px;margin-left:8px">TT Cookie</span>
-  <input id="ttCookieInput" type="password" placeholder="sessionid=... (optional)" style="width:180px"/>
-  <a href="/database" target="_blank" style="margin-left:auto;text-decoration:none"><button class="btn btn-p" style="font-size:11px">🗂 Database</button></a>
-  <span id="userLabel" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
-  <button class="btn" style="font-size:11px" onclick="signOut()">Sign Out</button>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <button class="btn" onclick="toggleSettings()" id="settingsBtn" title="API keys &amp; cookies">⚙ Settings</button>
+    <a href="/database" target="_blank" style="text-decoration:none"><button class="btn btn-p">🗂 Database</button></a>
+    <span id="userLabel" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
+    <button class="btn" style="font-size:11px" onclick="signOut()">Sign Out</button>
+  </div>
 </header>
+<div id="settingsPanel">
+  <label>Google Maps API Key<input id="apiKeyInput" type="password" placeholder="AIza..."/></label>
+  <label>RapidAPI Key<input id="rapidApiKeyInput" type="password" placeholder="For Instagram stats"/></label>
+  <label>Instagram Cookie <span style="font-weight:400;color:var(--muted)">(synced by extension)</span><input id="igCookieInput" type="password" placeholder="sessionid=..."/></label>
+  <label>TikTok Cookie <span style="font-weight:400;color:var(--muted)">(synced by extension)</span><input id="ttCookieInput" type="password" placeholder="sessionid=..."/></label>
+</div>
 <div class="main">
   <div id="map"></div>
   <aside class="sidebar">
@@ -994,6 +999,14 @@ window.addEventListener('storage', e => {
 });
 
 // ── City ──
+function toggleSettings(){
+  const p=document.getElementById('settingsPanel');
+  const open=p.style.display==='flex';
+  p.style.display=open?'none':'flex';
+  document.getElementById('settingsBtn').style.background=open?'':'var(--accent)';
+  document.getElementById('settingsBtn').style.color=open?'':'#fff';
+}
+
 async function goToCity(){
   const city = document.getElementById('cityInput').value.trim();
   if(!city) return;
