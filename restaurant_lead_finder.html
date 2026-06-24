@@ -976,27 +976,28 @@ function extFetch(type, handle, name, city, url) {
 })();
 
 // Save API keys and cookies to Supabase on change
-document.getElementById('apiKeyInput').addEventListener('input', function(){
-  supabaseClient.from('shared_settings').update({google_key: this.value.trim()}).eq('id',1);
-});
-document.getElementById('rapidApiKeyInput').addEventListener('input', function(){
-  supabaseClient.from('shared_settings').update({rapid_key: this.value.trim()}).eq('id',1);
-});
-document.getElementById('igCookieInput').addEventListener('input', function(){
-  if(currentUser) supabaseClient.from('user_profiles').update({ig_cookie: this.value.trim()}).eq('id', currentUser.id);
-});
-document.getElementById('ttCookieInput').addEventListener('input', function(){
-  if(currentUser) supabaseClient.from('user_profiles').update({tt_cookie: this.value.trim()}).eq('id', currentUser.id);
-});
-// Also save cookies when extension syncs them via localStorage
+async function saveSharedKey(field, value){
+  const {error} = await supabaseClient.from('shared_settings').update({[field]: value}).eq('id',1);
+  if(error) console.error('saveSharedKey', field, error);
+}
+async function saveUserProfile(field, value){
+  if(!currentUser) return;
+  const {error} = await supabaseClient.from('user_profiles').update({[field]: value}).eq('id', currentUser.id);
+  if(error) console.error('saveUserProfile', field, error);
+}
+document.getElementById('apiKeyInput').addEventListener('input', function(){ saveSharedKey('google_key', this.value.trim()); });
+document.getElementById('rapidApiKeyInput').addEventListener('input', function(){ saveSharedKey('rapid_key', this.value.trim()); });
+document.getElementById('igCookieInput').addEventListener('input', function(){ saveUserProfile('ig_cookie', this.value.trim()); });
+document.getElementById('ttCookieInput').addEventListener('input', function(){ saveUserProfile('tt_cookie', this.value.trim()); });
+// Also save when extension syncs cookies via localStorage
 window.addEventListener('storage', e => {
-  if(e.key === 'leadscout_ig_cookie' && e.newValue && currentUser){
+  if(e.key === 'leadscout_ig_cookie' && e.newValue){
     document.getElementById('igCookieInput').value = e.newValue;
-    supabaseClient.from('user_profiles').update({ig_cookie: e.newValue}).eq('id', currentUser.id);
+    saveUserProfile('ig_cookie', e.newValue);
   }
-  if(e.key === 'leadscout_tt_cookie' && e.newValue && currentUser){
+  if(e.key === 'leadscout_tt_cookie' && e.newValue){
     document.getElementById('ttCookieInput').value = e.newValue;
-    supabaseClient.from('user_profiles').update({tt_cookie: e.newValue}).eq('id', currentUser.id);
+    saveUserProfile('tt_cookie', e.newValue);
   }
 });
 
