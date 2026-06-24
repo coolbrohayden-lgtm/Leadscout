@@ -869,9 +869,13 @@ async function dbAll(store) {
 
 async function saveLead(lead){
   if(!lead.place_id) return;
-  // Strip non-serializable properties (Leaflet marker has DOM refs)
   const {marker, ...saveable} = lead;
   if(currentUser) saveable.scanned_by = currentUser.id;
+  // Supabase integer columns must be null, not ""
+  const intCols = ['ig_followers','ig_posts','tt_followers','tt_total_likes','google_rating','google_reviews','score','lat','lng'];
+  for(const col of intCols){
+    if(saveable[col] === '' || saveable[col] === undefined) saveable[col] = null;
+  }
   try {
     await dbPut('leads', saveable);
     await dbPut('scan_cache',{place_id:lead.place_id, scanned_at: lead.scanned_at||Date.now()});
