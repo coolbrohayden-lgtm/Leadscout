@@ -749,6 +749,8 @@ select { background: var(--surface2); border: 1px solid var(--border); border-ra
   <input id="apiKeyInput" type="password" placeholder="AIza... (for scanning)"/>
   <span style="color:var(--muted);font-size:11px;margin-left:8px">RapidAPI Key</span>
   <input id="rapidApiKeyInput" type="password" placeholder="RapidAPI key" style="width:200px"/>
+  <span style="color:var(--muted);font-size:11px;margin-left:8px">IG Cookie</span>
+  <input id="igCookieInput" type="password" placeholder="sessionid=... (optional)" style="width:180px"/>
   <span style="color:var(--muted);font-size:11px;margin-left:8px">TT Cookie</span>
   <input id="ttCookieInput" type="password" placeholder="sessionid=... (optional)" style="width:180px"/>
   <a href="/database" target="_blank" style="margin-left:auto;text-decoration:none"><button class="btn btn-p" style="font-size:11px">🗂 Database</button></a>
@@ -961,6 +963,8 @@ function extFetch(type, handle, name, city, url) {
   if(savedKey) document.getElementById('apiKeyInput').value = savedKey;
   const savedRapidKey = localStorage.getItem('leadscout_rapid_key');
   if(savedRapidKey) document.getElementById('rapidApiKeyInput').value = savedRapidKey;
+  const savedIgCookie = localStorage.getItem('leadscout_ig_cookie');
+  if(savedIgCookie) document.getElementById('igCookieInput').value = savedIgCookie;
   const savedTtCookie = localStorage.getItem('leadscout_tt_cookie');
   if(savedTtCookie) document.getElementById('ttCookieInput').value = savedTtCookie;
   await loadAllLeads();
@@ -974,6 +978,9 @@ document.getElementById('apiKeyInput').addEventListener('input', function(){
 });
 document.getElementById('rapidApiKeyInput').addEventListener('input', function(){
   localStorage.setItem('leadscout_rapid_key', this.value.trim());
+});
+document.getElementById('igCookieInput').addEventListener('input', function(){
+  localStorage.setItem('leadscout_ig_cookie', this.value.trim());
 });
 document.getElementById('ttCookieInput').addEventListener('input', function(){
   localStorage.setItem('leadscout_tt_cookie', this.value.trim());
