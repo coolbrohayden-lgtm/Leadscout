@@ -1483,6 +1483,25 @@ const BOOKING_DOMAINS=['sevenrooms.com','opentable.com','resy.com','tock.com','y
 async function scrapeSocials(website){
   const result={instagram:null,facebook:null,tiktok:null};
   if(!website)return result;
+  // If the Maps "website" is itself a social media URL, extract handle directly
+  const igDirect = website.match(/instagram\.com\/([A-Za-z0-9_.]+)\/?(\?.*)?$/);
+  if(igDirect && igDirect[1] && !['p','reel','stories','explore','rsrc.php','accounts'].includes(igDirect[1])){
+    dbg(`website IS Instagram: @${igDirect[1]}`);
+    result.instagram = igDirect[1];
+    return result;
+  }
+  const ttDirect = website.match(/tiktok\.com\/@([A-Za-z0-9_.]+)\/?(\?.*)?$/);
+  if(ttDirect && ttDirect[1]){
+    dbg(`website IS TikTok: @${ttDirect[1]}`);
+    result.tiktok = ttDirect[1];
+    return result;
+  }
+  const fbDirect = website.match(/facebook\.com\/([A-Za-z0-9_.]+)\/?(\?.*)?$/);
+  if(fbDirect && fbDirect[1] && !['pages','groups','events','share'].includes(fbDirect[1])){
+    dbg(`website IS Facebook: ${fbDirect[1]}`);
+    result.facebook = `https://facebook.com/${fbDirect[1]}`;
+    return result;
+  }
   // Strip UTM params
   let base;
   try{ const u=new URL(website); u.search=''; base=u.href.replace(/\/$/,''); }
