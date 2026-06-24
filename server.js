@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const HTML_FILE = path.join(__dirname, 'restaurant_lead_finder.html');
 
 function fetchPageDirect(pageUrl, redirects=0, extraHeaders={}, debug=false) {
