@@ -1116,26 +1116,9 @@ async function startScan(debugMode=false){
     dbg('Extension not connected — social searches will be skipped');
   }
 
-  // Check Instagram rate limit status and choose fetch method for this session
+  igFetchMode = extReady ? 'ext' : 'rapidapi';
   const rapidKey = document.getElementById('rapidApiKeyInput')?.value.trim();
-  igFetchMode = 'rapidapi'; // default to paid if no extension
-  if(extReady){
-    dbg('Checking Instagram session status...');
-    const test = await extFetch('fetchig', 'instagram');
-    if(test?.error === 'HTTP 429'){
-      dbg('⚠️ Instagram rate limited — using RapidAPI for this session');
-      igFetchMode = 'rapidapi';
-    } else if(test?.error){
-      dbg(`Instagram session check failed (${test.error}) — using RapidAPI`);
-      igFetchMode = 'rapidapi';
-    } else {
-      dbg('✅ Instagram session OK — using extension (free) for this session');
-      igFetchMode = 'ext';
-    }
-  }
-  if(igFetchMode === 'rapidapi' && !rapidKey){
-    dbg('⚠️ No RapidAPI key set — IG stats will be unavailable');
-  }
+  if(!extReady && !rapidKey) dbg('⚠️ No extension and no RapidAPI key — IG stats will be unavailable');
   setProgress(0);
 
   // Expand each selected chunk into a grid of sub-tiles so large selections are fully covered.
