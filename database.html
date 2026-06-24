@@ -1,0 +1,425 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LeadScout — Database</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#1c2230;--border:#2a3040;
+  --text:#e6edf3;--muted:#7d8590;--accent:#6c63ff;
+  --hot:#ff5f5f;--warm:#f5a623;--cold:#4ade80;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:16px;}
+.logo{font-size:15px;font-weight:700;}.logo span{color:var(--accent);}
+.back-btn{font-size:12px;color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:6px;transition:.15s;}
+.back-btn:hover{color:var(--text);border-color:var(--accent);}
+.hdr-right{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.btn{padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);}
+.btn:hover{opacity:.8;}
+.btn-p{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-danger{background:rgba(255,95,95,.15);border-color:var(--hot);color:var(--hot);}
+
+/* Stats bar */
+.stats-bar{display:flex;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.stat-pill{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 16px;text-align:center;min-width:90px;}
+.stat-pill .v{font-size:22px;font-weight:700;}
+.stat-pill .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+.stat-pill.hot .v{color:var(--hot);}
+.stat-pill.warm .v{color:var(--warm);}
+.stat-pill.cold .v{color:var(--cold);}
+.stat-pill.signed .v{color:#6c63ff;}
+
+/* Controls */
+.controls{display:flex;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap;}
+.search-box{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:220px;}
+.search-box:focus{border-color:var(--accent);}
+.filter-chips{display:flex;gap:5px;flex-wrap:wrap;}
+.fchip{font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;transition:.15s;}
+.fchip:hover{border-color:var(--accent);color:var(--text);}
+.fchip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.fchip.fc-hot.active{background:var(--hot);border-color:var(--hot);}
+.fchip.fc-warm.active{background:var(--warm);border-color:var(--warm);}
+.fchip.fc-cold.active{background:var(--cold);border-color:var(--cold);}
+.fchip.fc-signed.active{background:#6c63ff;border-color:#6c63ff;}
+.fchip.fc-denied.active{background:#444;border-color:#666;color:#aaa;}
+.sort-sel{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;outline:none;}
+
+/* Table */
+.table-wrap{overflow-x:auto;padding:0 20px 20px;}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;}
+th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:7px 10px;border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+th:hover{color:var(--text);}
+td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+tr:hover td{background:var(--surface2);}
+.badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;}
+.badge-hot{background:rgba(255,95,95,.2);color:var(--hot);}
+.badge-warm{background:rgba(245,166,35,.2);color:var(--warm);}
+.badge-cold{background:rgba(74,222,128,.15);color:var(--cold);}
+.badge-new{background:var(--surface2);color:var(--muted);}
+.badge-contacted{background:rgba(108,99,255,.2);color:#a09aff;}
+.badge-interested{background:rgba(245,166,35,.15);color:var(--warm);}
+.badge-signed{background:rgba(74,222,128,.15);color:var(--cold);}
+.badge-denied{background:rgba(100,100,100,.15);color:#888;}
+
+/* Social pills */
+.pill{display:inline-flex;align-items:center;gap:3px;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;text-decoration:none;margin:1px;}
+.pill-ig{background:rgba(200,80,192,.15);border:1px solid rgba(200,80,192,.4);color:#c850c0;}
+.pill-tt{background:rgba(105,201,208,.15);border:1px solid rgba(105,201,208,.4);color:#69C9D0;}
+.pill-fb{background:rgba(66,103,178,.15);border:1px solid rgba(66,103,178,.4);color:#6080c8;}
+.pill-dim{opacity:.35;}
+
+/* Status select */
+.status-sel{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:2px 5px;cursor:pointer;outline:none;}
+
+/* Notes */
+.notes-input{background:transparent;border:none;border-bottom:1px dashed var(--border);color:var(--text);font-size:11px;width:140px;outline:none;padding:2px 0;}
+.notes-input:focus{border-bottom-color:var(--accent);}
+.notes-input::placeholder{color:var(--muted);}
+
+/* Empty */
+.empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px;line-height:1.8;}
+
+/* Blacklist section toggle */
+.section-toggle{font-size:11px;color:var(--muted);cursor:pointer;padding:8px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;}
+.section-toggle:hover{color:var(--text);}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/auth.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo">Lead<span>Scout</span></div>
+  <a href="/" class="back-btn">← Back to Map</a>
+  <div class="hdr-right">
+    <button class="btn" onclick="exportCSV()">Export CSV</button>
+    <button class="btn btn-danger" onclick="clearDenied()">Clear Denied</button>
+    <button class="btn btn-danger" onclick="clearAll()">🗑 Clear All</button>
+  </div>
+    <span id="userLabel" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
+    <button class="btn" style="font-size:11px" onclick="signOut()">Sign Out</button>
+  </header>
+
+<div class="stats-bar" id="statsBar"></div>
+
+<div class="controls">
+  <input class="search-box" id="searchBox" placeholder="Search by name, address, notes…" oninput="render()"/>
+  <div class="filter-chips">
+    <button class="fchip active" data-f="all" onclick="setFilter('all')">All</button>
+    <button class="fchip fc-hot"  data-f="HOT"  onclick="setFilter('HOT')">🔥 HOT</button>
+    <button class="fchip fc-warm" data-f="WARM" onclick="setFilter('WARM')">WARM</button>
+    <button class="fchip fc-cold" data-f="COLD" onclick="setFilter('COLD')">COLD</button>
+    <button class="fchip fc-signed"   data-f="signed"    onclick="setFilter('signed')">✅ Signed</button>
+    <button class="fchip"             data-f="contacted" onclick="setFilter('contacted')">📞 Contacted</button>
+    <button class="fchip"             data-f="interested" onclick="setFilter('interested')">👀 Interested</button>
+    <button class="fchip fc-denied"   data-f="denied"    onclick="setFilter('denied')">🚫 Denied</button>
+  </div>
+  <select class="sort-sel" id="locationSel" onchange="render()">
+    <option value="">📍 All locations</option>
+  </select>
+  <select class="sort-sel" onchange="render()">
+    <option value="score_desc">Score ↓</option>
+    <option value="score_asc">Score ↑</option>
+    <option value="name_asc">Name A–Z</option>
+    <option value="date_desc">Scanned (newest)</option>
+    <option value="status">Status</option>
+  </select>
+  <span id="countLabel" style="font-size:11px;color:var(--muted);margin-left:4px;"></span>
+</div>
+
+<div class="table-wrap">
+  <div id="tableContainer"></div>
+</div>
+
+<div class="section-toggle" id="blacklistToggle" onclick="toggleBlacklist()" style="display:none">
+  ▶ Show blacklisted places (<span id="blCount">0</span>)
+</div>
+<div id="blacklistSection" style="display:none;padding:0 20px 20px;"></div>
+
+<script>
+let allLeads = [];
+let blacklist = [];
+let activeFilter = 'all';
+
+// ── Supabase helpers ──
+async function dbPut(store, val){
+  const {error} = await supabaseClient.from(store).upsert(val, {onConflict:'place_id'});
+  if(error) console.error('dbPut', store, error);
+}
+async function dbDel(store, key){
+  const {error} = await supabaseClient.from(store).delete().eq('place_id', key);
+  if(error) console.error('dbDel', store, key, error);
+}
+async function dbAll(store){
+  const {data, error} = await supabaseClient.from(store).select('*');
+  if(error) console.error('dbAll', store, error);
+  return data || [];
+}
+
+async function load(){
+  allLeads = await dbAll('leads');
+  blacklist = await dbAll('blacklist');
+  renderStats();
+  buildLocationOptions();
+  render();
+  const blSection = document.getElementById('blacklistToggle');
+  if(blacklist.length){ blSection.style.display='flex'; document.getElementById('blCount').textContent=blacklist.length; }
+}
+
+// ── Location options ──
+function extractCity(address){
+  // "123 Main St, Miami, FL 33101, USA" → "Miami, FL"
+  if(!address) return '';
+  const parts = address.split(',').map(s=>s.trim());
+  // Find the part that looks like a city (before the state abbreviation)
+  for(let i=1;i<parts.length-1;i++){
+    const next = parts[i+1]||'';
+    if(/^[A-Z]{2}\s*\d{0,5}$/.test(next.trim().split(' ')[0])) return parts[i];
+    if(/^[A-Z]{2}\b/.test(next.trim())) return parts[i];
+  }
+  return parts[1]||'';
+}
+
+function buildLocationOptions(){
+  const sel = document.getElementById('locationSel');
+  const cities = [...new Set(allLeads.map(l=>extractCity(l.address)).filter(Boolean))].sort();
+  const current = sel.value;
+  sel.innerHTML = `<option value="">📍 All locations</option>` +
+    cities.map(c=>`<option value="${c}"${c===current?'selected':''}>${c}</option>`).join('');
+}
+
+// ── Filter + Sort + Search ──
+function setFilter(f){
+  activeFilter=f;
+  document.querySelectorAll('.fchip').forEach(b=>b.classList.toggle('active',b.dataset.f===f));
+  render();
+}
+
+function getFiltered(){
+  const q=(document.getElementById('searchBox').value||'').toLowerCase();
+  const locFilter=(document.getElementById('locationSel').value||'').toLowerCase();
+  const sortVal=document.querySelector('.sort-sel').value;
+  let leads=allLeads.filter(l=>{
+    if(activeFilter==='all') {}
+    else if(activeFilter==='HOT'||activeFilter==='WARM'||activeFilter==='COLD'){ if(l.label!==activeFilter) return false; }
+    else { if(l.status!==activeFilter) return false; }
+    if(locFilter && !l.address.toLowerCase().includes(locFilter)) return false;
+    if(q){
+      const hay=(l.name+l.address+(l.notes||'')+(l.instagram||'')+(l.tiktok||'')).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  leads.sort((a,b)=>{
+    if(sortVal==='score_desc') return (b.score||0)-(a.score||0);
+    if(sortVal==='score_asc')  return (a.score||0)-(b.score||0);
+    if(sortVal==='name_asc')   return a.name.localeCompare(b.name);
+    if(sortVal==='date_desc')  return (b.scanned_at||0)-(a.scanned_at||0);
+    if(sortVal==='status'){
+      const order={signed:0,interested:1,contacted:2,new:3,denied:4};
+      return (order[a.status||'new']??3)-(order[b.status||'new']??3);
+    }
+    return 0;
+  });
+  return leads;
+}
+
+// ── Render ──
+function renderStats(){
+  const s=document.getElementById('statsBar');
+  const total=allLeads.length;
+  const hot=allLeads.filter(l=>l.label==='HOT').length;
+  const warm=allLeads.filter(l=>l.label==='WARM').length;
+  const cold=allLeads.filter(l=>l.label==='COLD').length;
+  const signed=allLeads.filter(l=>l.status==='signed').length;
+  const contacted=allLeads.filter(l=>l.status==='contacted'||l.status==='interested').length;
+  s.innerHTML=`
+    <div class="stat-pill"><div class="v">${total}</div><div class="l">Total</div></div>
+    <div class="stat-pill hot"><div class="v">${hot}</div><div class="l">HOT</div></div>
+    <div class="stat-pill warm"><div class="v">${warm}</div><div class="l">WARM</div></div>
+    <div class="stat-pill cold"><div class="v">${cold}</div><div class="l">COLD</div></div>
+    <div class="stat-pill signed"><div class="v">${signed}</div><div class="l">Signed</div></div>
+    <div class="stat-pill"><div class="v">${contacted}</div><div class="l">In Progress</div></div>
+  `;
+}
+
+function igSvg(){return `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>`;}
+function ttSvg(){return `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z"/></svg>`;}
+function fbSvg(){return `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>`;}
+
+function render(){
+  const leads=getFiltered();
+  document.getElementById('countLabel').textContent=`${leads.length} result${leads.length===1?'':'s'}`;
+  const c=document.getElementById('tableContainer');
+  if(!leads.length){c.innerHTML='<div class="empty">No leads match this filter.</div>';return;}
+  c.innerHTML=`<table>
+    <thead><tr>
+      <th>Name</th>
+      <th>Address</th>
+      <th>Phone</th>
+      <th>Score</th>
+      <th>Social</th>
+      <th>Status</th>
+      <th>Notes</th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody>
+    ${leads.map(l=>{
+      const status=l.status||'new';
+      const ig=l.instagram?`<a class="pill pill-ig" href="https://instagram.com/${l.instagram}" target="_blank">${igSvg()} @${l.instagram}</a>`
+        :l.ig_signal?`<span class="pill pill-ig pill-dim">${igSvg()} IG?</span>`:'';
+      const tt=l.tiktok?`<a class="pill pill-tt" href="https://tiktok.com/@${l.tiktok}" target="_blank">${ttSvg()} @${l.tiktok}</a>`
+        :l.tt_signal?`<span class="pill pill-tt pill-dim">${ttSvg()} TT?</span>`:'';
+      const fb=l.facebook?`<a class="pill pill-fb" href="https://facebook.com/${l.facebook}" target="_blank">${fbSvg()} FB</a>`
+        :l.fb_signal?`<span class="pill pill-fb pill-dim">${fbSvg()} FB?</span>`:'';
+      const website=l.website?`<a href="${l.website}" target="_blank" style="color:var(--muted);font-size:10px;text-decoration:none">🌐</a>`:'';
+      const scanDate=l.scanned_at?new Date(l.scanned_at).toLocaleDateString():'';
+      return `<tr>
+        <td>
+          <div style="font-weight:600">${l.name}</div>
+          <span class="badge badge-${(l.label||'cold').toLowerCase()}">${l.label||'?'}</span>
+          ${scanDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${scanDate}</div>`:''}
+        </td>
+        <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
+        <td style="white-space:nowrap">${l.phone||'—'}</td>
+        <td style="font-weight:700;color:var(--accent)">${l.score||0}</td>
+        <td>${ig}${tt}${fb}</td>
+        <td>
+          <select class="status-sel badge badge-${status}" onchange="setStatus('${l.place_id}',this.value)">
+            <option value="new"        ${status==='new'       ?'selected':''}>New</option>
+            <option value="contacted"  ${status==='contacted' ?'selected':''}>📞 Contacted</option>
+            <option value="interested" ${status==='interested'?'selected':''}>👀 Interested</option>
+            <option value="signed"     ${status==='signed'    ?'selected':''}>✅ Signed</option>
+            <option value="denied"     ${status==='denied'    ?'selected':''}>🚫 Denied</option>
+          </select>
+        </td>
+        <td><input class="notes-input" value="${(l.notes||'').replace(/"/g,'&quot;')}" placeholder="Add notes…" onblur="saveNotes('${l.place_id}',this.value)"/></td>
+        <td>
+          <button class="btn" style="font-size:10px;padding:2px 8px" onclick="deleteLead('${l.place_id}')">Delete</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ── Actions ──
+async function setStatus(placeId, status){
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  if(!lead) return;
+  lead.status = status;
+  const {error} = await supabaseClient.from('leads').update({status, updated_by: currentUser ? currentUser.id : null, updated_at: new Date().toISOString()}).eq('place_id', placeId);
+  if(error) console.error('setStatus', error);
+  if(status==='denied'){
+    const blEntry = {place_id:placeId, name:lead.name, blacklisted_by: currentUser ? currentUser.id : null, blacklisted_at: new Date().toISOString()};
+    await dbPut('blacklist', blEntry);
+    blacklist = blacklist.filter(b=>b.place_id!==placeId);
+    blacklist.push(blEntry);
+    document.getElementById('blCount').textContent=blacklist.length;
+    document.getElementById('blacklistToggle').style.display='flex';
+  } else {
+    await dbDel('blacklist',placeId);
+    blacklist = blacklist.filter(b=>b.place_id!==placeId);
+    document.getElementById('blCount').textContent=blacklist.length;
+  }
+  renderStats();
+  render();
+}
+
+async function saveNotes(placeId, notes){
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  if(!lead) return;
+  lead.notes = notes;
+  const {error} = await supabaseClient.from('leads').update({notes, updated_by: currentUser ? currentUser.id : null}).eq('place_id', placeId);
+  if(error) console.error('saveNotes', error);
+}
+
+async function deleteLead(placeId){
+  if(!confirm('Remove this lead from the database?')) return;
+  allLeads = allLeads.filter(l=>l.place_id!==placeId);
+  await dbDel('leads', placeId);
+  await dbDel('scan_cache', placeId);
+  renderStats();
+  render();
+}
+
+async function clearDenied(){
+  if(!confirm('Permanently delete all denied leads? Their place IDs will stay blacklisted.')) return;
+  const denied = allLeads.filter(l=>l.status==='denied');
+  for(const l of denied){
+    await supabaseClient.from('leads').delete().eq('place_id',l.place_id);
+    await supabaseClient.from('scan_cache').delete().eq('place_id',l.place_id);
+  }
+  allLeads = allLeads.filter(l=>l.status!=='denied');
+  renderStats();
+  render();
+}
+
+async function clearAll(){
+  if(!confirm('Delete ALL leads and scan cache? This lets you rescan everything fresh.\n\nBlacklisted places will NOT be removed.')) return;
+  const {error: e1} = await supabaseClient.from('leads').delete().neq('place_id','');
+  const {error: e2} = await supabaseClient.from('scan_cache').delete().neq('place_id','');
+  if(e1) console.error('clearAll leads', e1);
+  if(e2) console.error('clearAll scan_cache', e2);
+  allLeads = [];
+  renderStats();
+  buildLocationOptions();
+  render();
+}
+
+function toggleBlacklist(){
+  const s=document.getElementById('blacklistSection');
+  const t=document.getElementById('blacklistToggle');
+  const open=s.style.display==='none';
+  s.style.display=open?'block':'none';
+  t.textContent=(open?'▼ ':'▶ ')+`Blacklisted places (${blacklist.length})`;
+  if(open){
+    s.innerHTML=blacklist.length?`<table style="width:100%;font-size:12px;border-collapse:collapse">
+      ${blacklist.map(b=>`<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px">${b.name||b.place_id}</td>
+        <td style="padding:6px 10px;color:var(--muted)">${b.added?new Date(b.added).toLocaleDateString():''}</td>
+        <td style="padding:6px 10px"><button class="btn" style="font-size:10px;padding:2px 8px" onclick="unblacklist('${b.place_id}')">Remove</button></td>
+      </tr>`).join('')}
+    </table>`:'<div style="padding:12px;color:var(--muted);font-size:12px">No blacklisted places.</div>';
+  }
+}
+
+async function unblacklist(placeId){
+  await dbDel('blacklist',placeId);
+  blacklist=blacklist.filter(b=>b.place_id!==placeId);
+  const lead=allLeads.find(l=>l.place_id===placeId);
+  if(lead){
+    lead.status='new';
+    await supabaseClient.from('leads').update({status:'new', updated_by: currentUser ? currentUser.id : null}).eq('place_id',placeId);
+  }
+  document.getElementById('blCount').textContent=blacklist.length;
+  if(!blacklist.length) document.getElementById('blacklistToggle').style.display='none';
+  toggleBlacklist(); toggleBlacklist();
+  render();
+}
+
+function exportCSV(){
+  const leads=getFiltered();
+  const keys=['name','address','phone','website','google_rating','google_reviews','instagram','ig_followers','ig_posts','tiktok','tt_followers','tt_total_likes','facebook','score','label','status','notes','ig_bio','ig_bio_location','tt_bio','tt_bio_location','reasons'];
+  const rows=[keys.join(','),...leads.map(l=>keys.map(k=>`"${String(l[k]||'').replace(/"/g,'""')}"`).join(','))];
+  const a=document.createElement('a');
+  const ts=new Date().toISOString().slice(0,10).replace(/-/g,'');
+  a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
+  a.download=`leadscout_db_${ts}.csv`; a.click();
+}
+
+// ── Init ──
+(async () => {
+  const user = await requireAuth();
+  if(!user) return;
+  const uname = await getUserName();
+  const lbl = document.getElementById('userLabel');
+  if(lbl) lbl.textContent = uname;
+  await load();
+})();
+</script>
+</body>
+</html>

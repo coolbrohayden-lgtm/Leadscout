@@ -1,0 +1,10 @@
+node_modules/
+.claude/
+*.csv
+*.log
+*.docx
+server.log
+make_context_doc.js
+CONTEXT_FOR_CLAUDE_CODE.md
+CTemppasteles.html
+cookie-extension/

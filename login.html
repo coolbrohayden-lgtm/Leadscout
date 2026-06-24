@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LeadScout — Login</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0f1117;--surface:#161b22;--surface2:#1c2230;--border:#2a3040;
+  --text:#e6edf3;--muted:#7d8590;--accent:#6c63ff;--hot:#ff5f5f;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px 40px;width:100%;max-width:380px;}
+.logo{font-size:20px;font-weight:700;text-align:center;margin-bottom:24px;}
+.logo span{color:var(--accent);}
+.tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;}
+.tab{flex:1;padding:8px;font-size:12px;font-weight:600;text-align:center;cursor:pointer;background:var(--surface2);color:var(--muted);transition:.15s;border:none;}
+.tab.active{background:var(--accent);color:#fff;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+.field input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 12px;outline:none;transition:.15s;}
+.field input:focus{border-color:var(--accent);}
+.btn{width:100%;padding:9px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:var(--accent);color:#fff;margin-top:4px;transition:.15s;}
+.btn:hover{opacity:.85;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.error{font-size:12px;color:var(--hot);margin-top:12px;text-align:center;min-height:18px;}
+.success{font-size:12px;color:#4ade80;margin-top:12px;text-align:center;min-height:18px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Lead<span>Scout</span></div>
+  <div class="tabs">
+    <button class="tab active" id="tabSignIn" onclick="showTab('signin')">Sign In</button>
+    <button class="tab" id="tabSignUp" onclick="showTab('signup')">Sign Up</button>
+  </div>
+
+  <!-- Sign In -->
+  <div id="formSignIn">
+    <div class="field"><label>Email</label><input id="siEmail" type="email" placeholder="you@example.com" autocomplete="email"/></div>
+    <div class="field"><label>Password</label><input id="siPass" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
+    <button class="btn" id="siBtn" onclick="signIn()">Sign In</button>
+    <div class="error" id="siErr"></div>
+  </div>
+
+  <!-- Sign Up -->
+  <div id="formSignUp" style="display:none">
+    <div class="field"><label>Name</label><input id="suName" type="text" placeholder="Your name"/></div>
+    <div class="field"><label>Email</label><input id="suEmail" type="email" placeholder="you@example.com" autocomplete="email"/></div>
+    <div class="field"><label>Password</label><input id="suPass" type="password" placeholder="Min 6 characters" autocomplete="new-password"/></div>
+    <button class="btn" id="suBtn" onclick="signUp()">Create Account</button>
+    <div class="error" id="suErr"></div>
+    <div class="success" id="suOk"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPA_URL = 'https://yiutqeuiwdrfiwioyhwr.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpdXRxZXVpd2RyZml3aW95aHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNzU3NDgsImV4cCI6MjA5Nzg1MTc0OH0.TlIwAggWacEj1ZutusH-gaMa2LSt_ZAjov-2Ao3LHlo';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+function showTab(tab){
+  document.getElementById('formSignIn').style.display = tab==='signin'?'':'none';
+  document.getElementById('formSignUp').style.display = tab==='signup'?'':'none';
+  document.getElementById('tabSignIn').classList.toggle('active', tab==='signin');
+  document.getElementById('tabSignUp').classList.toggle('active', tab==='signup');
+}
+
+async function signIn(){
+  const email = document.getElementById('siEmail').value.trim();
+  const pass  = document.getElementById('siPass').value;
+  const btn   = document.getElementById('siBtn');
+  const err   = document.getElementById('siErr');
+  err.textContent='';
+  if(!email||!pass){err.textContent='Please fill in all fields.';return;}
+  btn.disabled=true; btn.textContent='Signing in…';
+  const {error} = await sb.auth.signInWithPassword({email,password:pass});
+  if(error){err.textContent=error.message; btn.disabled=false; btn.textContent='Sign In'; return;}
+  window.location.href='/';
+}
+
+async function signUp(){
+  const name  = document.getElementById('suName').value.trim();
+  const email = document.getElementById('suEmail').value.trim();
+  const pass  = document.getElementById('suPass').value;
+  const btn   = document.getElementById('suBtn');
+  const err   = document.getElementById('suErr');
+  const ok    = document.getElementById('suOk');
+  err.textContent=''; ok.textContent='';
+  if(!name||!email||!pass){err.textContent='Please fill in all fields.';return;}
+  if(pass.length<6){err.textContent='Password must be at least 6 characters.';return;}
+  btn.disabled=true; btn.textContent='Creating account…';
+  const {data, error} = await sb.auth.signUp({email, password:pass, options:{data:{name}}});
+  if(error){err.textContent=error.message; btn.disabled=false; btn.textContent='Create Account'; return;}
+  // Insert user profile
+  if(data.user){
+    await sb.from('user_profiles').upsert({id:data.user.id, name});
+  }
+  ok.textContent='Account created! Check your email to confirm, then sign in.';
+  btn.disabled=false; btn.textContent='Create Account';
+}
+
+// If already logged in, redirect
+sb.auth.getSession().then(({data:{session}})=>{
+  if(session) window.location.href='/';
+});
+
+// Allow Enter key
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter'){
+    if(document.getElementById('formSignIn').style.display!=='none') signIn();
+    else signUp();
+  }
+});
+</script>
+</body>
+</html>
