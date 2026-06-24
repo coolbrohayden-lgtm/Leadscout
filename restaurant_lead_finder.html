@@ -1335,7 +1335,7 @@ function dbg(msg,data){
 async function nearbySearch(lat,lng,radius,key){
   dbg(`nearbySearch lat=${lat.toFixed(4)} lng=${lng.toFixed(4)} r=${Math.round(radius)}`);
   try{
-    const url=`http://localhost:3000/nearbysearch?lat=${lat}&lng=${lng}&radius=${Math.round(radius)}&key=${key}`;
+    const url=`/nearbysearch?lat=${lat}&lng=${lng}&radius=${Math.round(radius)}&key=${key}`;
     const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
     const d=await r.json();
     if(d.error){dbg('server error',d.error);return[];}
@@ -1350,7 +1350,7 @@ async function nearbySearch(lat,lng,radius,key){
 
 async function placeDetails(placeId,key,fallback){
   try{
-    const url=`http://localhost:3000/placedetails?place_id=${encodeURIComponent(placeId)}&key=${key}`;
+    const url=`/placedetails?place_id=${encodeURIComponent(placeId)}&key=${key}`;
     const r=await fetch(url,{signal:AbortSignal.timeout(10000)});
     const d=await r.json();
     if(d.result) return d.result;
