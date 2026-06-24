@@ -138,7 +138,7 @@ tr:hover td{background:var(--surface2);}
     <select class="sort-sel" id="locationSel" onchange="render()">
       <option value="">📍 All locations</option>
     </select>
-    <select class="sort-sel" onchange="render()">
+    <select class="sort-sel" id="sortSel" onchange="render()">
       <option value="score_desc">Score ↓</option>
       <option value="score_asc">Score ↑</option>
       <option value="name_asc">Name A–Z</option>
@@ -227,7 +227,7 @@ function setFilter(f){
 function getFiltered(){
   const q=(document.getElementById('searchBox').value||'').toLowerCase();
   const locFilter=(document.getElementById('locationSel').value||'').toLowerCase();
-  const sortVal=document.querySelector('.sort-sel').value;
+  const sortVal=document.getElementById('sortSel')?.value||'score_desc';
   const minScore=parseInt(document.getElementById('minScoreSel')?.value||'0');
   let leads=allLeads.filter(l=>{
     if(activeFilter==='all') {}
