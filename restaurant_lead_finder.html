@@ -962,32 +962,42 @@ function extFetch(type, handle, name, city, url) {
   }).addTo(map);
   map.on('moveend zoomend', redrawGrid);
   redrawGrid();
-  // Restore saved API key and social cookies
-  const savedKey = localStorage.getItem('leadscout_api_key');
-  if(savedKey) document.getElementById('apiKeyInput').value = savedKey;
-  const savedRapidKey = localStorage.getItem('leadscout_rapid_key');
-  if(savedRapidKey) document.getElementById('rapidApiKeyInput').value = savedRapidKey;
-  const savedIgCookie = localStorage.getItem('leadscout_ig_cookie');
-  if(savedIgCookie) document.getElementById('igCookieInput').value = savedIgCookie;
-  const savedTtCookie = localStorage.getItem('leadscout_tt_cookie');
-  if(savedTtCookie) document.getElementById('ttCookieInput').value = savedTtCookie;
+  // Load shared keys (google + rapid) from Supabase
+  const {data: sharedSettings} = await supabaseClient.from('shared_settings').select('*').eq('id',1).single();
+  if(sharedSettings?.google_key) document.getElementById('apiKeyInput').value = sharedSettings.google_key;
+  if(sharedSettings?.rapid_key) document.getElementById('rapidApiKeyInput').value = sharedSettings.rapid_key;
+  // Load per-user cookies from Supabase
+  const {data: profile} = await supabaseClient.from('user_profiles').select('ig_cookie,tt_cookie').eq('id', currentUser.id).single();
+  if(profile?.ig_cookie) document.getElementById('igCookieInput').value = profile.ig_cookie;
+  if(profile?.tt_cookie) document.getElementById('ttCookieInput').value = profile.tt_cookie;
   await loadAllLeads();
   if(allLeads.length) document.getElementById('exportBtn').style.display='block';
   setStatus('Click grid squares to select zones, then hit Scan.');
 })();
 
-// Save API key and social cookies whenever they change
+// Save API keys and cookies to Supabase on change
 document.getElementById('apiKeyInput').addEventListener('input', function(){
-  localStorage.setItem('leadscout_api_key', this.value.trim());
+  supabaseClient.from('shared_settings').update({google_key: this.value.trim()}).eq('id',1);
 });
 document.getElementById('rapidApiKeyInput').addEventListener('input', function(){
-  localStorage.setItem('leadscout_rapid_key', this.value.trim());
+  supabaseClient.from('shared_settings').update({rapid_key: this.value.trim()}).eq('id',1);
 });
 document.getElementById('igCookieInput').addEventListener('input', function(){
-  localStorage.setItem('leadscout_ig_cookie', this.value.trim());
+  if(currentUser) supabaseClient.from('user_profiles').update({ig_cookie: this.value.trim()}).eq('id', currentUser.id);
 });
 document.getElementById('ttCookieInput').addEventListener('input', function(){
-  localStorage.setItem('leadscout_tt_cookie', this.value.trim());
+  if(currentUser) supabaseClient.from('user_profiles').update({tt_cookie: this.value.trim()}).eq('id', currentUser.id);
+});
+// Also save cookies when extension syncs them via localStorage
+window.addEventListener('storage', e => {
+  if(e.key === 'leadscout_ig_cookie' && e.newValue && currentUser){
+    document.getElementById('igCookieInput').value = e.newValue;
+    supabaseClient.from('user_profiles').update({ig_cookie: e.newValue}).eq('id', currentUser.id);
+  }
+  if(e.key === 'leadscout_tt_cookie' && e.newValue && currentUser){
+    document.getElementById('ttCookieInput').value = e.newValue;
+    supabaseClient.from('user_profiles').update({tt_cookie: e.newValue}).eq('id', currentUser.id);
+  }
 });
 
 // ── City ──
