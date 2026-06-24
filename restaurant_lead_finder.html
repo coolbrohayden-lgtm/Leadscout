@@ -855,7 +855,7 @@ async function dbGet(store, key) {
 }
 async function dbPut(store, val) {
   const {error} = await supabaseClient.from(store).upsert(val, {onConflict:'place_id'});
-  if(error) console.error('dbPut', store, error);
+  if(error){ console.error('dbPut', store, error); dbg(`❌ DB save error (${store}): ${error.message} — code:${error.code}`); }
 }
 async function dbDel(store, key) {
   const {error} = await supabaseClient.from(store).delete().eq('place_id', key);
