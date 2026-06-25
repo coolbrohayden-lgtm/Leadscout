@@ -396,35 +396,33 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Step 3: Apollo.io — person match by domain + name
-      if (apollo_key && (result.owner_name || website)) {
-        const domain = website ? new URL(website.startsWith('http') ? website : 'https://'+website).hostname.replace('www.','') : '';
-        const apolloBody = JSON.stringify({
-          api_key: apollo_key,
-          ...(result.owner_name ? { name: result.owner_name } : {}),
-          ...(domain ? { organization_domain: domain } : {}),
-          reveal_personal_emails: true,
-        });
-        const apolloData = await new Promise((resolve, reject) => {
-          const urlObj = new URL('https://api.apollo.io/v1/people/match');
-          const options = {
-            hostname: urlObj.hostname, path: urlObj.pathname, method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(apolloBody), 'Cache-Control': 'no-cache' }
-          };
-          const req2 = https.request(options, r => {
-            let d = ''; r.on('data', c => d += c);
-            r.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve(null); } });
+      if (apollo_key && website) {
+        const domain = (() => { try { return new URL(website.startsWith('http') ? website : 'https://'+website).hostname.replace('www.',''); } catch(e) { return ''; } })();
+        if (domain) {
+          // Use organization_top_people — available on free tier
+          const apolloBody = JSON.stringify({ api_key: apollo_key, organization_domain: domain, per_page: 1 });
+          const apolloData = await new Promise((resolve) => {
+            const urlObj = new URL('https://api.apollo.io/v1/mixed_people/organization_top_people');
+            const options = {
+              hostname: urlObj.hostname, path: urlObj.pathname, method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(apolloBody), 'Cache-Control': 'no-cache' }
+            };
+            const req2 = https.request(options, r => {
+              let d = ''; r.on('data', c => d += c);
+              r.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve(null); } });
+            });
+            req2.on('error', () => resolve(null));
+            req2.setTimeout(8000, () => { req2.destroy(); resolve(null); });
+            req2.write(apolloBody); req2.end();
           });
-          req2.on('error', () => resolve(null));
-          req2.setTimeout(8000, () => { req2.destroy(); resolve(null); });
-          req2.write(apolloBody); req2.end();
-        });
-        if (apolloData?.person) {
-          const p2 = apolloData.person;
-          if (!result.owner_name && p2.name) result.owner_name = p2.name;
-          if (p2.email) result.owner_email = p2.email;
-          const phone = p2.phone_numbers?.[0]?.raw_number || p2.phone_numbers?.[0]?.sanitized_number;
-          if (phone) result.owner_phone = phone;
-          if (p2.name || p2.email) result.owner_source = (result.owner_source ? result.owner_source + ' + ' : '') + 'Apollo';
+          const person = apolloData?.people?.[0] || apolloData?.contacts?.[0];
+          if (person) {
+            if (!result.owner_name && person.name) result.owner_name = person.name;
+            if (person.email) result.owner_email = person.email;
+            const phone = person.phone_numbers?.[0]?.raw_number || person.phone_numbers?.[0]?.sanitized_number;
+            if (phone) result.owner_phone = phone;
+            result.owner_source = (result.owner_source ? result.owner_source + ' + ' : '') + 'Apollo';
+          }
         }
       }
 
