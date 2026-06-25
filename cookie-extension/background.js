@@ -57,11 +57,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.name && sender.tab) chrome.tabs.remove(sender.tab.id).catch(() => {});
     // Find the LeadScout tab to send result back to
     chrome.tabs.query({}, tabs => {
-      let target = null;
-      if (pendingSunbizTabId) target = tabs.find(t => t.id === pendingSunbizTabId);
-      if (!target) target = tabs.find(t => t.url && (t.url.includes('leadscout-production-f926.up.railway.app') || t.url.startsWith('http://localhost:3000')));
+      const dbTab = tabs.find(t => t.url && t.url.includes('/database'));
+      const anyLsTab = tabs.find(t => t.url && (t.url.includes('leadscout-production-f926.up.railway.app') || t.url.startsWith('http://localhost:3000')));
+      const target = dbTab || anyLsTab;
+      console.log('[LeadScout] Sending owner to tab:', target?.url, '| name:', msg.name);
       if (target) {
-        chrome.tabs.sendMessage(target.id, { type: 'owner_text', name: msg.name || null });
+        chrome.tabs.sendMessage(target.id, { type: 'owner_text', name: msg.name || null }, (resp) => {
+          if (chrome.runtime.lastError) console.log('[LeadScout] sendMessage error:', chrome.runtime.lastError.message);
+          else console.log('[LeadScout] sendMessage OK:', resp);
+        });
       }
       pendingSunbizTabId = null;
     });
