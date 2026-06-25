@@ -1,5 +1,5 @@
-// Fill the SunBiz street address field from the URL hash
-if (window.location.href.includes('ByAddress')) {
+(function () {
+  if (!window.location.href.includes('ByAddress')) return;
   const street = decodeURIComponent(window.location.hash.slice(1));
   if (!street) return;
   setTimeout(() => {
@@ -9,4 +9,4 @@ if (window.location.href.includes('ByAddress')) {
       input.focus();
     }
   }, 600);
-}
+})();
