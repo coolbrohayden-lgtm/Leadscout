@@ -357,15 +357,16 @@ const server = http.createServer(async (req, res) => {
   if (parsed.pathname === '/enrich') {
     const { name, website, ig_bio, state, apollo_key } = parsed.query;
     if (!name) { res.writeHead(400); res.end('Missing name'); return; }
-    const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null };
+    const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null, _debug: [] };
     try {
       // Step 1: OpenCorporates — get officer/owner name
       const jurisdiction = (state || 'fl').toLowerCase();
       const ocUrl = `https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(name)}&jurisdiction_code=us_${jurisdiction}&per_page=1&format=json`;
-      const ocData = await httpsGet(ocUrl).catch(() => null);
+      const ocData = await httpsGet(ocUrl).catch(e => { result._debug.push(`OC fetch error: ${e.message}`); return null; });
+      result._debug.push(`OC companies found: ${ocData?.results?.companies?.length ?? 'null/error'}`);
       if (ocData?.results?.companies?.length) {
         const company = ocData.results.companies[0].company;
-        // Try to get officers
+        result._debug.push(`OC company: ${company.name}, officers on search: ${company.officers?.length ?? 0}`);
         if (company.officers?.length) {
           const owner = company.officers.find(o => /owner|president|ceo|principal|member|manager/i.test(o.officer?.position||'')) || company.officers[0];
           if (owner?.officer?.name) {
@@ -373,11 +374,11 @@ const server = http.createServer(async (req, res) => {
             result.owner_source = 'OpenCorporates';
           }
         }
-        // If no officers on search result, try fetching the company detail
         if (!result.owner_name && company.opencorporates_url) {
           const slug = company.opencorporates_url.replace('https://opencorporates.com/companies/','');
           const detail = await httpsGet(`https://api.opencorporates.com/v0.4/companies/${slug}?format=json`).catch(()=>null);
           const officers = detail?.results?.company?.officers || [];
+          result._debug.push(`OC detail officers: ${officers.length}`);
           const owner = officers.find(o => /owner|president|ceo|principal|member|manager/i.test(o.officer?.position||'')) || officers[0];
           if (owner?.officer?.name) {
             result.owner_name = owner.officer.name;
@@ -415,7 +416,9 @@ const server = http.createServer(async (req, res) => {
             req2.setTimeout(8000, () => { req2.destroy(); resolve(null); });
             req2.write(apolloBody); req2.end();
           });
+          result._debug.push(`Apollo raw keys: ${apolloData ? Object.keys(apolloData).join(',') : 'null'}`);
           const person = apolloData?.people?.[0] || apolloData?.contacts?.[0];
+          result._debug.push(`Apollo person: ${person?.name ?? 'none'}`);
           if (person) {
             if (!result.owner_name && person.name) result.owner_name = person.name;
             if (person.email) result.owner_email = person.email;
