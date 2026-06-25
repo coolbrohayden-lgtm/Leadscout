@@ -2,10 +2,10 @@
   const url = window.location.href;
 
   // ByName form page — read lead data from hash, store in session, fill + submit
-  if (url.includes('ByName') || url.includes('ByAddress')) {
+  if (url.includes('ByAddress') || url.includes('ByName')) {
     let hashData = {};
     try { hashData = JSON.parse(decodeURIComponent(window.location.hash.slice(1))); } catch(e) {}
-    const val = hashData.name || hashData.address || '';
+    const val = hashData.address || hashData.name || '';
     if (!val) return;
 
     // Persist lead data across navigation (hash is lost on form submit)
@@ -29,19 +29,9 @@
   // Results page — read lead data from session storage, score + fetch best match
   if (url.includes('SearchResults')) {
     setTimeout(async () => { // async kept for Promise.all fetch below
-      const sunbiz_lead = JSON.parse(sessionStorage.getItem('sunbiz_lead') || '{}');
-      const leadName = (sunbiz_lead.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '');
-      const leadAddr = (sunbiz_lead.address || '').toLowerCase();
-      const searchWords = leadName.split(/\s+/).filter(w => w.length > 2);
-      const searchCity = (leadAddr.split(',')[1] || '').trim();
-      const searchZip  = (leadAddr.match(/\b(\d{5})\b/) || [])[1] || '';
-      const searchStreetNum = (leadAddr.match(/^(\d+)/) || [])[1] || '';
-
-      console.log('[LeadScout] Lead name:', leadName, '| words:', searchWords);
-
-      // Collect active rows only
+      // Address search returns results already matched to the address — just take first active result
       const rows = [...document.querySelectorAll('tr')];
-      const candidates = [];
+      let firstActive = null;
       for (const row of rows) {
         const cells = row.querySelectorAll('td');
         if (cells.length < 3) continue;
@@ -51,47 +41,27 @@
         if (/^T/i.test(docNum)) continue; // skip trademarks
         const status = cells[2]?.textContent?.trim() || '';
         if (!/^active$/i.test(status)) continue;
-        const entityName = cells[0].textContent.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '');
-        const nameScore = searchWords.filter(w => entityName.includes(w)).length;
-        const href = new URL(link.getAttribute('href'), 'https://search.sunbiz.org').href;
-        candidates.push({ href, entityName, nameScore });
+        firstActive = new URL(link.getAttribute('href'), 'https://search.sunbiz.org').href;
+        break;
       }
 
-      console.log('[LeadScout] Active candidates:', candidates.map(c => `${c.entityName} (score:${c.nameScore})`));
+      console.log('[LeadScout] First active result:', firstActive);
 
-      if (!candidates.length) {
-        console.log('[LeadScout] No active candidates — leaving tab open');
+      if (!firstActive) {
+        console.log('[LeadScout] No active results — leaving tab open');
         return;
       }
 
-      // Only keep top-scoring matches
-      const maxScore = Math.max(...candidates.map(c => c.nameScore));
-      const top = maxScore > 0 ? candidates.filter(c => c.nameScore === maxScore) : candidates;
-      console.log('[LeadScout] Top candidates:', top.map(c => c.entityName));
-
-      // Fetch each top candidate's detail page and score address
-      const scored = await Promise.all(top.map(async c => {
-        try {
-          const resp = await fetch(c.href, { credentials: 'include' });
-          const html = await resp.text();
-          const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
-          let addrScore = 0;
-          if (searchCity && text.includes(searchCity)) addrScore += 3;
-          if (searchZip  && text.includes(searchZip))  addrScore += 4;
-          if (searchStreetNum && text.includes(searchStreetNum)) addrScore += 2;
-          const ownerName = extractAgentName(html);
-          console.log('[LeadScout]', c.entityName, '→ addrScore:', addrScore, '| owner:', ownerName);
-          return { ...c, addrScore, totalScore: c.nameScore + addrScore, ownerName };
-        } catch(e) {
-          console.log('[LeadScout] Fetch failed:', c.entityName, e.message);
-          return { ...c, addrScore: 0, totalScore: c.nameScore, ownerName: null };
-        }
-      }));
-
-      scored.sort((a, b) => b.totalScore - a.totalScore);
-      const winner = scored[0];
-      console.log('[LeadScout] Winner:', winner?.entityName, '| owner:', winner?.ownerName);
-      chrome.runtime.sendMessage({ type: 'sunbiz_result', name: winner?.ownerName || null });
+      try {
+        const resp = await fetch(firstActive, { credentials: 'include' });
+        const html = await resp.text();
+        const ownerName = extractAgentName(html);
+        console.log('[LeadScout] Owner found:', ownerName);
+        chrome.runtime.sendMessage({ type: 'sunbiz_result', name: ownerName || null });
+      } catch(e) {
+        console.log('[LeadScout] Fetch failed:', e.message);
+        chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null });
+      }
 
     }, 1800);
     return;

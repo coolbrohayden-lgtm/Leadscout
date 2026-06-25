@@ -584,9 +584,9 @@ async function enrichLead(placeId){
 
   _pendingEnrichId = placeId;
   if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Opened SunBiz ↗</span>';
-  navigator.clipboard.writeText(lead.name).catch(()=>{});
-  const sbHash = encodeURIComponent(JSON.stringify({ name: lead.name, address: lead.address||'' }));
-  window.open('https://search.sunbiz.org/Inquiry/CorporationSearch/ByName#' + sbHash, '_blank');
+  navigator.clipboard.writeText(street).catch(()=>{});
+  const sbHash = encodeURIComponent(JSON.stringify({ address: street }));
+  window.open('https://search.sunbiz.org/Inquiry/CorporationSearch/ByAddress#' + sbHash, '_blank');
 }
 
 // ── Init ──
