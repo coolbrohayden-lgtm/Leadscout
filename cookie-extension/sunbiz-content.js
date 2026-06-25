@@ -1,51 +1,74 @@
 // Injected into search.sunbiz.org pages
-// On a results list: auto-clicks the first result
-// On a detail page: extracts the registered agent name and sends it back to LeadScout
+// ByAddress form → fill + submit → results list → click first → detail → extract name → send back
 
 (function () {
   const url = window.location.href;
 
-  // Results list page — click the first corporation link
+  // Step 1: Address search form — fill in the street and submit
+  if (url.includes('ByAddress')) {
+    chrome.storage.session.get('sunbiz_street', ({ sunbiz_street }) => {
+      if (!sunbiz_street) return;
+      setTimeout(() => {
+        // Find the search input — SunBiz uses name="searchTerm" or similar
+        const input = document.querySelector('input[name="searchTerm"], input[name="SearchTerm"], input#searchTerm, input[type="text"]');
+        if (!input) {
+          chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null });
+          return;
+        }
+        input.value = sunbiz_street;
+        // Submit the form
+        const form = input.closest('form') || document.querySelector('form');
+        if (form) {
+          form.submit();
+        } else {
+          const btn = document.querySelector('input[type="submit"], button[type="submit"], button');
+          if (btn) btn.click();
+        }
+      }, 800);
+    });
+    return;
+  }
+
+  // Step 2: Results list — click the first corporation link
   if (url.includes('SearchResults')) {
     setTimeout(() => {
       const link = document.querySelector('a[href*="SearchResultDetail"]');
       if (link) {
         link.click();
       } else {
-        // No results found — report back
-        chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null, notFound: true });
+        chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null });
       }
     }, 1200);
     return;
   }
 
-  // Detail page — extract registered agent name
+  // Step 3: Detail page — extract registered agent name
   if (url.includes('SearchResultDetail')) {
     setTimeout(() => {
       let agentName = null;
 
-      // SunBiz detail page uses a span-based layout
-      // "Registered Agent Name & Address" label followed by the name
-      const spans = document.querySelectorAll('span');
-      for (let i = 0; i < spans.length; i++) {
-        if (/Registered Agent Name/i.test(spans[i].textContent)) {
-          // Name is usually the next non-empty span
-          for (let j = i + 1; j < Math.min(i + 6, spans.length); j++) {
-            const txt = spans[j].textContent.trim();
-            if (txt && /^[A-Z]{2,}/.test(txt) && !/address|agent|name/i.test(txt)) {
-              agentName = txt;
-              break;
-            }
-          }
-          break;
-        }
-      }
+      // SunBiz detail page: find "Registered Agent Name & Address" label, then read the next content
+      const allText = document.body.innerText;
 
-      // Fallback: scan page text for ALL-CAPS "LASTNAME, FIRSTNAME" pattern near "Registered Agent"
+      // Pattern: label on one line, name on next line in ALL-CAPS
+      const m1 = allText.match(/Registered Agent Name[^\n]*\n\s*([A-Z]{2,}[A-Z,\s.]+)/);
+      if (m1) agentName = m1[1].trim().split('\n')[0].trim();
+
+      // Fallback: scan table cells
       if (!agentName) {
-        const text = document.body.innerText;
-        const m = text.match(/Registered Agent Name[^\n]*\n+([A-Z]{2,},\s+[A-Z]{2,}(?:\s+[A-Z])?)/);
-        if (m) agentName = m[1].trim();
+        const cells = document.querySelectorAll('td, span, div');
+        for (let i = 0; i < cells.length; i++) {
+          if (/Registered Agent Name/i.test(cells[i].textContent)) {
+            for (let j = i + 1; j < Math.min(i + 8, cells.length); j++) {
+              const txt = cells[j].textContent.trim();
+              if (txt && /^[A-Z]{2,},\s+[A-Z]/.test(txt)) {
+                agentName = txt;
+                break;
+              }
+            }
+            if (agentName) break;
+          }
+        }
       }
 
       // Format "GARCIA, ALEJANDRO J" → "Alejandro J Garcia"

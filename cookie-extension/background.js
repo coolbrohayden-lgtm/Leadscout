@@ -23,7 +23,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // LeadScout page requests: open SunBiz search in a new tab
   if (msg.type === 'open_sunbiz') {
     pendingSunbizTabId = sender.tab ? sender.tab.id : null;
-    const url = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?inquiryType=Address&inquiryDirectionType=ForwardList&searchNameOrder=&masterDataType=Master&searchTerm=${encodeURIComponent(msg.street)}&listNameOrder=`;
+    const url = `https://search.sunbiz.org/Inquiry/CorporationSearch/ByAddress`;
+    chrome.storage.session.set({ sunbiz_street: msg.street });
     chrome.tabs.create({ url, active: false });
     sendResponse({ ok: true });
     return true;
