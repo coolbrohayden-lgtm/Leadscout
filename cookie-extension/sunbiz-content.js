@@ -1,80 +1,87 @@
 (function () {
   const url = window.location.href;
-  let hashData = {};
-  try { hashData = JSON.parse(decodeURIComponent(window.location.hash.slice(1))); } catch(e) {}
 
-  // Fill the search field on the form page
+  // ByName form page — read lead data from hash, store in session, fill + submit
   if (url.includes('ByName') || url.includes('ByAddress')) {
+    let hashData = {};
+    try { hashData = JSON.parse(decodeURIComponent(window.location.hash.slice(1))); } catch(e) {}
     const val = hashData.name || hashData.address || '';
     if (!val) return;
+
+    // Persist lead data across navigation (hash is lost on form submit)
+    chrome.storage.session.set({ sunbiz_lead: hashData });
+
     setTimeout(() => {
       const input = document.querySelector('input[type="text"]');
-      if (input) { input.value = val; input.focus(); }
-    }, 600);
+      if (!input) return;
+      input.value = val;
+      input.focus();
+      // Auto-submit
+      setTimeout(() => {
+        const btn = document.querySelector('input[type="submit"], button[type="submit"]');
+        if (btn) btn.click();
+        else input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+      }, 400);
+    }, 700);
     return;
   }
 
-  // Results page — score all ACTIVE results by name + address, pick best
+  // Results page — read lead data from session storage, score + fetch best match
   if (url.includes('SearchResults')) {
     setTimeout(async () => {
-      const searchName = (hashData.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '');
-      const searchAddr = (hashData.address || '').toLowerCase();
-      const searchWords = searchName.split(/\s+/).filter(w => w.length > 2);
+      const { sunbiz_lead } = await chrome.storage.session.get('sunbiz_lead');
+      const leadName = (sunbiz_lead?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '');
+      const leadAddr = (sunbiz_lead?.address || '').toLowerCase();
+      const searchWords = leadName.split(/\s+/).filter(w => w.length > 2);
+      const searchCity = (leadAddr.split(',')[1] || '').trim();
+      const searchZip  = (leadAddr.match(/\b(\d{5})\b/) || [])[1] || '';
+      const searchStreetNum = (leadAddr.match(/^(\d+)/) || [])[1] || '';
 
-      // Extract city, state, zip from lead address for comparison
-      const addrParts = searchAddr.split(',').map(s => s.trim());
-      const searchCity = addrParts[1] || '';
-      const searchZip  = (searchAddr.match(/\b(\d{5})\b/) || [])[1] || '';
-      const searchStreetNum = (searchAddr.match(/^(\d+)/) || [])[1] || '';
+      console.log('[LeadScout] Lead name:', leadName, '| words:', searchWords);
 
-      // Collect all ACTIVE rows only
+      // Collect active rows only
       const rows = [...document.querySelectorAll('tr')];
       const candidates = [];
-
       for (const row of rows) {
         const cells = row.querySelectorAll('td');
         if (cells.length < 3) continue;
         const link = cells[0].querySelector('a[href*="SearchResultDetail"]');
         if (!link) continue;
         const status = cells[2]?.textContent?.trim() || '';
-        if (!/^active$/i.test(status)) continue; // skip INACT, NAME HS, InActive, etc.
-
+        if (!/^active$/i.test(status)) continue;
         const entityName = cells[0].textContent.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '');
         const nameScore = searchWords.filter(w => entityName.includes(w)).length;
         const href = new URL(link.getAttribute('href'), 'https://search.sunbiz.org').href;
         candidates.push({ href, entityName, nameScore });
       }
 
-      console.log('[LeadScout] All active candidates:', candidates.map(c => `${c.entityName} (score:${c.nameScore})`));
+      console.log('[LeadScout] Active candidates:', candidates.map(c => `${c.entityName} (score:${c.nameScore})`));
 
-      // Only keep candidates that match at least ALL search words (or best available score)
-      const maxScore = Math.max(...candidates.map(c => c.nameScore));
-      const filtered = candidates.filter(c => c.nameScore === maxScore && maxScore > 0);
-      console.log('[LeadScout] Filtered to top matches:', filtered.map(c => c.entityName));
-
-      if (!filtered.length) {
-        console.log('[LeadScout] No name matches — leaving tab open for manual right-click');
+      if (!candidates.length) {
+        console.log('[LeadScout] No active candidates — leaving tab open');
         return;
       }
 
-      // Fetch each top candidate's detail page and compare address
-      const scored = await Promise.all(filtered.map(async c => {
+      // Only keep top-scoring matches
+      const maxScore = Math.max(...candidates.map(c => c.nameScore));
+      const top = maxScore > 0 ? candidates.filter(c => c.nameScore === maxScore) : candidates;
+      console.log('[LeadScout] Top candidates:', top.map(c => c.entityName));
+
+      // Fetch each top candidate's detail page and score address
+      const scored = await Promise.all(top.map(async c => {
         try {
-          console.log('[LeadScout] Fetching detail page:', c.href);
           const resp = await fetch(c.href, { credentials: 'include' });
           const html = await resp.text();
           const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
-
           let addrScore = 0;
           if (searchCity && text.includes(searchCity)) addrScore += 3;
           if (searchZip  && text.includes(searchZip))  addrScore += 4;
           if (searchStreetNum && text.includes(searchStreetNum)) addrScore += 2;
-
           const ownerName = extractAgentName(html);
           console.log('[LeadScout]', c.entityName, '→ addrScore:', addrScore, '| owner:', ownerName);
           return { ...c, addrScore, totalScore: c.nameScore + addrScore, ownerName };
         } catch(e) {
-          console.log('[LeadScout] Fetch failed for', c.entityName, e.message);
+          console.log('[LeadScout] Fetch failed:', c.entityName, e.message);
           return { ...c, addrScore: 0, totalScore: c.nameScore, ownerName: null };
         }
       }));
@@ -88,11 +95,10 @@
     return;
   }
 
-  // Landed directly on a detail page (single-result search)
+  // Landed directly on detail page
   if (url.includes('SearchResultDetail')) {
     setTimeout(() => {
-      const name = extractAgentName(document.body.innerHTML);
-      chrome.runtime.sendMessage({ type: 'sunbiz_result', name: name || null });
+      chrome.runtime.sendMessage({ type: 'sunbiz_result', name: extractAgentName(document.body.innerHTML) || null });
     }, 1500);
   }
 
