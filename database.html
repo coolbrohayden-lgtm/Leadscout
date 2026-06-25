@@ -576,7 +576,7 @@ async function enrichLead(placeId){
   }
 
   // Open SunBiz directly — content script reads the street from the URL hash
-  const street = (lead.address||'').split(',')[0].trim();
+  const street = (lead.address||'').split(',')[0].trim().split(/\s+/).slice(0,3).join(' ');
   if (!street) {
     if(cell) cell.innerHTML = `<span style="font-size:10px;color:var(--muted)">No address</span>`;
     return;
