@@ -34,11 +34,7 @@ chrome.contextMenus.onClicked.addListener((info) => {
     const dbTab = tabs.find(t => t.url && t.url.includes('/database'));
     const lsTab = dbTab || tabs.find(t => t.url && (t.url.includes('leadscout-production-f926.up.railway.app') || t.url.startsWith('http://localhost:3000')));
     if (!lsTab) return;
-    chrome.scripting.executeScript({
-      target: { tabId: lsTab.id },
-      func: (name) => { if (window.receiveOwnerText) window.receiveOwnerText(name); },
-      args: [text],
-    });
+    chrome.tabs.sendMessage(lsTab.id, { type: 'owner_text', name: text });
   });
 });
 

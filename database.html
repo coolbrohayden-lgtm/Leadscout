@@ -525,6 +525,11 @@ window.receiveOwnerText = async function(name) {
   _pendingEnrichId = null;
 };
 
+// Listen for context menu relay from content script
+window.addEventListener('message', e => {
+  if (e.data?.__leadscout_owner_text) window.receiveOwnerText(e.data.name);
+});
+
 // Called by the extension background when SunBiz result comes back
 window.receiveSunbizOwner = async function(name) {
   const placeId = _pendingEnrichId;
