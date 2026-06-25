@@ -16,6 +16,30 @@ function stayAwake() {
 chrome.alarms.onAlarm.addListener(a => { if (a.name === 'keepalive') {} });
 stayAwake();
 
+// Context menu — send highlighted text to LeadScout as owner name
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'send_to_leadscout',
+    title: 'Move to LeadScout (owner name)',
+    contexts: ['selection'],
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info) => {
+  if (info.menuItemId !== 'send_to_leadscout') return;
+  const text = (info.selectionText || '').trim();
+  if (!text) return;
+  chrome.tabs.query({}, tabs => {
+    const lsTab = tabs.find(t => t.url && (t.url.includes('leadscout-production-f926.up.railway.app') || t.url.startsWith('http://localhost:3000')));
+    if (!lsTab) return;
+    chrome.scripting.executeScript({
+      target: { tabId: lsTab.id },
+      func: (name) => { if (window.receiveSunbizOwner) window.receiveSunbizOwner(name); },
+      args: [text],
+    });
+  });
+});
+
 // Track which LeadScout tab requested a SunBiz lookup
 let pendingSunbizTabId = null;
 

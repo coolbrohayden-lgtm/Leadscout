@@ -5,6 +5,7 @@
   "description": "Fetches Instagram and TikTok stats for LeadScout",
   "permissions": [
     "alarms",
+    "contextMenus",
     "cookies",
     "scripting",
     "storage",
