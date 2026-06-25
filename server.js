@@ -353,67 +353,36 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Owner enrichment waterfall: OpenCorporates → IG bio parse → Apollo
+  // Owner lookup: IG bio parse + Facebook About scrape + Google search link
   if (parsed.pathname === '/enrich') {
-    const { name, website, ig_bio, state, apollo_key } = parsed.query;
+    const { name, website, ig_bio, facebook } = parsed.query;
     if (!name) { res.writeHead(400); res.end('Missing name'); return; }
-    const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null, _debug: [] };
+    const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null, google_search_url: null };
     try {
-      // Step 1: IG bio parse for owner mention (free)
+      // Always provide a Google search link for the caller
+      result.google_search_url = `https://www.google.com/search?q=${encodeURIComponent('"' + name + '" owner')}`;
+
+      // Step 1: Parse IG bio for owner mention
       if (ig_bio) {
-        const ownerMatch = ig_bio.match(/(?:owner|founder|operated by|run by|by)[:\s]+([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i);
-        if (ownerMatch) {
-          result.owner_name = ownerMatch[1].trim();
-          result.owner_source = 'Instagram bio';
-          result._debug.push(`IG bio owner: ${result.owner_name}`);
-        } else {
-          result._debug.push('IG bio: no owner mention found');
-        }
-      }
-
-      // Step 2: IG bio — look for owner self-tags like "Owner: Jane" or "by @jane"
-      if (!result.owner_name && ig_bio) {
-        const ownerMatch = ig_bio.match(/(?:owner|founder|operated by|run by|by)[:\s]+([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i);
+        const ownerMatch = ig_bio.match(/(?:owner|founder|operated by|run by|by)[:\s]+([A-Za-z]+(?: [A-Za-z]+)?)/i);
         if (ownerMatch) {
           result.owner_name = ownerMatch[1].trim();
           result.owner_source = 'Instagram bio';
         }
       }
 
-      // Step 3: Apollo.io — person match by domain + name
-      if (apollo_key && website) {
-        const domain = (() => { try { return new URL(website.startsWith('http') ? website : 'https://'+website).hostname.replace('www.',''); } catch(e) { return ''; } })();
-        if (domain) {
-          // organizations/enrich — free tier
-          const apolloBody = JSON.stringify({ api_key: apollo_key, domain });
-          const apolloData = await new Promise((resolve) => {
-            const urlObj = new URL(`https://api.apollo.io/v1/organizations/enrich?domain=${encodeURIComponent(domain)}`);
-            const options = {
-              hostname: urlObj.hostname, path: urlObj.pathname + urlObj.search, method: 'GET',
-              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'X-Api-Key': apollo_key }
-            };
-            const req2 = https.request(options, r => {
-              let d = ''; r.on('data', c => d += c);
-              r.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve(null); } });
-            });
-            req2.on('error', () => resolve(null));
-            req2.setTimeout(8000, () => { req2.destroy(); resolve(null); });
-            req2.end();
-          });
-          result._debug.push(`Apollo org keys: ${apolloData ? Object.keys(apolloData).join(',') : 'null'} | msg: ${apolloData?.error || ''}`);
-          const org = apolloData?.organization;
-          if (org) {
-            result._debug.push(`Apollo org: ${org.name}, contacts: ${org.contacts?.length ?? 0}`);
-            const contact = org.contacts?.[0];
-            if (contact) {
-              if (!result.owner_name) result.owner_name = contact.name || null;
-              if (contact.email) result.owner_email = contact.email;
-              const phone = contact.phone_numbers?.[0]?.raw_number;
-              if (phone) result.owner_phone = phone;
-              result.owner_source = (result.owner_source ? result.owner_source + ' + ' : '') + 'Apollo';
-            }
+      // Step 2: Scrape Facebook About page for owner info
+      if (!result.owner_name && facebook) {
+        const fbHandle = facebook.replace(/.*facebook\.com\//,'').replace(/\/$/, '').replace(/\?.*/,'');
+        const fbUrl = `https://www.facebook.com/${fbHandle}/about`;
+        try {
+          const fbHtml = await fetchPageDirect(fbUrl, 0, { 'Accept': 'text/html', 'Accept-Language': 'en-US,en;q=0.9' });
+          const ownerMatch = fbHtml.match(/(?:Owner|Founder|Proprietor)[^<]{0,30}?([A-Z][a-z]+ [A-Z][a-z]+)/);
+          if (ownerMatch) {
+            result.owner_name = ownerMatch[1];
+            result.owner_source = 'Facebook';
           }
-        }
+        } catch(e) { /* Facebook blocked, skip */ }
       }
 
       res.writeHead(200, CORS);
