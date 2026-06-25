@@ -9,7 +9,7 @@
     if (!val) return;
 
     // Persist lead data across navigation (hash is lost on form submit)
-    chrome.storage.session.set({ sunbiz_lead: hashData });
+    chrome.storage.local.set({ sunbiz_lead: hashData });
 
     setTimeout(() => {
       const input = document.querySelector('input[type="text"]');
@@ -29,7 +29,7 @@
   // Results page — read lead data from session storage, score + fetch best match
   if (url.includes('SearchResults')) {
     setTimeout(async () => {
-      const { sunbiz_lead } = await chrome.storage.session.get('sunbiz_lead');
+      const { sunbiz_lead } = await chrome.storage.local.get('sunbiz_lead');
       const leadName = (sunbiz_lead?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '');
       const leadAddr = (sunbiz_lead?.address || '').toLowerCase();
       const searchWords = leadName.split(/\s+/).filter(w => w.length > 2);
