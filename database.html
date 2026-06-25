@@ -96,12 +96,16 @@ tr:hover td{background:var(--surface2);}
   <a href="/" class="back-btn">← Back to Map</a>
   <div class="hdr-right">
     <button class="btn" onclick="exportCSV()">Export CSV</button>
+    <button class="btn" onclick="toggleSettings()" id="settingsBtn">⚙ Keys</button>
     <button class="btn btn-danger" onclick="clearDenied()">Clear Denied</button>
     <button class="btn btn-danger" onclick="clearAll()">🗑 Clear All</button>
   </div>
     <span id="userLabel" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
     <button class="btn" style="font-size:11px" onclick="signOut()">Sign Out</button>
   </header>
+  <div id="settingsPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:none;gap:16px;flex-wrap:wrap;align-items:center">
+    <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Apollo.io API Key (for owner lookup)<input id="apolloKeyInput" type="password" placeholder="Apollo API key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
+  </div>
 
 <div class="stats-bar" id="statsBar"></div>
 
@@ -298,6 +302,7 @@ function render(){
       <th>Name</th>
       <th>Address</th>
       <th>Phone</th>
+      <th>Owner</th>
       <th>Score</th>
       <th>Social</th>
       <th>Status</th>
@@ -315,7 +320,13 @@ function render(){
         :l.fb_signal?`<span class="pill pill-fb pill-dim">${fbSvg()} FB?</span>`:'';
       const website=l.website?`<a href="${l.website}" target="_blank" style="color:var(--muted);font-size:10px;text-decoration:none">🌐</a>`:'';
       const scanDate=l.scanned_at?new Date(l.scanned_at).toLocaleDateString():'';
-      return `<tr>
+      const ownerHtml = l.owner_name
+        ? `<div style="font-size:11px;font-weight:600">${l.owner_name}</div>
+           ${l.owner_phone?`<div style="font-size:10px;color:var(--accent)">${l.owner_phone}</div>`:''}
+           ${l.owner_email?`<div style="font-size:10px;color:var(--muted)">${l.owner_email}</div>`:''}
+           <div style="font-size:9px;color:var(--muted);margin-top:1px">${l.owner_source||''}</div>`
+        : `<button class="btn" style="font-size:9px;padding:2px 7px;white-space:nowrap" onclick="enrichLead('${l.place_id}')">🔍 Find Owner</button>`;
+      return `<tr id="row-${l.place_id}">
         <td>
           <div style="font-weight:600">${l.name}</div>
           <span class="badge badge-${(l.label||'cold').toLowerCase()}">${l.label||'?'}</span>
@@ -323,6 +334,7 @@ function render(){
         </td>
         <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
         <td style="white-space:nowrap">${l.phone||'—'}</td>
+        <td style="min-width:140px" id="owner-${l.place_id}">${ownerHtml}</td>
         <td style="font-weight:700;color:var(--accent)">${l.score||0}</td>
         <td>${ig}${tt}${fb}</td>
         <td>
@@ -452,7 +464,7 @@ function esc(v){ return `"${String(v||'').replace(/"/g,'""')}"`; }
 
 function exportCSV(){
   const leads=getFiltered();
-  const header=['title','totalScore','reviewsCount','street','city','state','countryCode','website','phone','instagram','ig_followers','tiktok','tt_followers','facebook','leadScore','label','status','notes'];
+  const header=['title','totalScore','reviewsCount','street','city','state','countryCode','website','phone','instagram','ig_followers','tiktok','tt_followers','facebook','leadScore','label','status','notes','ownerName','ownerPhone','ownerEmail'];
   const rows=[header.join(','),...leads.map(l=>{
     const {street,city,state}=parseAddress(l.address);
     return [
@@ -474,12 +486,67 @@ function exportCSV(){
       esc(l.label||''),
       esc(l.status||''),
       esc(l.notes||''),
+      esc(l.owner_name||''),
+      esc(l.owner_phone||''),
+      esc(l.owner_email||''),
     ].join(',');
   })];
   const a=document.createElement('a');
   const ts=new Date().toISOString().slice(0,10).replace(/-/g,'');
   a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
   a.download=`leadscout_${ts}.csv`; a.click();
+}
+
+// ── Settings panel ──
+function toggleSettings(){
+  const p=document.getElementById('settingsPanel');
+  const open=p.style.display==='flex';
+  p.style.display=open?'none':'flex';
+  document.getElementById('settingsBtn').style.background=open?'':'var(--accent)';
+  document.getElementById('settingsBtn').style.color=open?'':'#fff';
+}
+document.getElementById('apolloKeyInput').addEventListener('input', function(){
+  localStorage.setItem('leadscout_apollo_key', this.value.trim());
+});
+
+// ── Owner enrichment ──
+async function enrichLead(placeId){
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  if(!lead) return;
+  const cell = document.getElementById(`owner-${placeId}`);
+  if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Searching…</span>';
+  const apolloKey = document.getElementById('apolloKeyInput').value.trim() || localStorage.getItem('leadscout_apollo_key') || '';
+  const addrParts = (lead.address||'').split(',');
+  const state = addrParts.length>=3 ? addrParts[addrParts.length-2].trim().split(' ')[0].toLowerCase() : 'fl';
+  const params = new URLSearchParams({
+    name: lead.name,
+    website: lead.website||'',
+    ig_bio: lead.ig_bio||'',
+    state,
+    ...(apolloKey ? {apollo_key: apolloKey} : {})
+  });
+  try {
+    const resp = await fetch(`/enrich?${params}`);
+    const data = await resp.json();
+    // Save to Supabase
+    const update = { owner_name: data.owner_name||null, owner_email: data.owner_email||null, owner_phone: data.owner_phone||null, owner_source: data.owner_source||null };
+    await supabaseClient.from('leads').update(update).eq('place_id', placeId);
+    // Update local cache
+    Object.assign(lead, update);
+    // Update cell
+    if(cell){
+      if(data.owner_name || data.owner_email || data.owner_phone){
+        cell.innerHTML = `<div style="font-size:11px;font-weight:600">${data.owner_name||'Unknown'}</div>
+          ${data.owner_phone?`<div style="font-size:10px;color:var(--accent)">${data.owner_phone}</div>`:''}
+          ${data.owner_email?`<div style="font-size:10px;color:var(--muted)">${data.owner_email}</div>`:''}
+          <div style="font-size:9px;color:var(--muted);margin-top:1px">${data.owner_source||''}</div>`;
+      } else {
+        cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Not found</span>';
+      }
+    }
+  } catch(e) {
+    if(cell) cell.innerHTML = `<span style="font-size:10px;color:#f66">Error: ${e.message}</span>`;
+  }
 }
 
 // ── Init ──
@@ -489,6 +556,9 @@ function exportCSV(){
   const uname = await getUserName();
   const lbl = document.getElementById('userLabel');
   if(lbl) lbl.textContent = uname;
+  // Load Apollo key from localStorage
+  const savedApollo = localStorage.getItem('leadscout_apollo_key');
+  if(savedApollo) document.getElementById('apolloKeyInput').value = savedApollo;
   await load();
 })();
 </script>

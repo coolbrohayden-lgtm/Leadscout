@@ -353,6 +353,91 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Owner enrichment waterfall: OpenCorporates → IG bio parse → Apollo
+  if (parsed.pathname === '/enrich') {
+    const { name, website, ig_bio, state, apollo_key } = parsed.query;
+    if (!name) { res.writeHead(400); res.end('Missing name'); return; }
+    const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null };
+    try {
+      // Step 1: OpenCorporates — get officer/owner name
+      const jurisdiction = (state || 'fl').toLowerCase();
+      const ocUrl = `https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(name)}&jurisdiction_code=us_${jurisdiction}&per_page=1&format=json`;
+      const ocData = await httpsGet(ocUrl).catch(() => null);
+      if (ocData?.results?.companies?.length) {
+        const company = ocData.results.companies[0].company;
+        // Try to get officers
+        if (company.officers?.length) {
+          const owner = company.officers.find(o => /owner|president|ceo|principal|member|manager/i.test(o.officer?.position||'')) || company.officers[0];
+          if (owner?.officer?.name) {
+            result.owner_name = owner.officer.name;
+            result.owner_source = 'OpenCorporates';
+          }
+        }
+        // If no officers on search result, try fetching the company detail
+        if (!result.owner_name && company.opencorporates_url) {
+          const slug = company.opencorporates_url.replace('https://opencorporates.com/companies/','');
+          const detail = await httpsGet(`https://api.opencorporates.com/v0.4/companies/${slug}?format=json`).catch(()=>null);
+          const officers = detail?.results?.company?.officers || [];
+          const owner = officers.find(o => /owner|president|ceo|principal|member|manager/i.test(o.officer?.position||'')) || officers[0];
+          if (owner?.officer?.name) {
+            result.owner_name = owner.officer.name;
+            result.owner_source = 'OpenCorporates';
+          }
+        }
+      }
+
+      // Step 2: IG bio — look for owner self-tags like "Owner: Jane" or "by @jane"
+      if (!result.owner_name && ig_bio) {
+        const ownerMatch = ig_bio.match(/(?:owner|founder|operated by|run by|by)[:\s]+([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i);
+        if (ownerMatch) {
+          result.owner_name = ownerMatch[1].trim();
+          result.owner_source = 'Instagram bio';
+        }
+      }
+
+      // Step 3: Apollo.io — person match by domain + name
+      if (apollo_key && (result.owner_name || website)) {
+        const domain = website ? new URL(website.startsWith('http') ? website : 'https://'+website).hostname.replace('www.','') : '';
+        const apolloBody = JSON.stringify({
+          api_key: apollo_key,
+          ...(result.owner_name ? { name: result.owner_name } : {}),
+          ...(domain ? { organization_domain: domain } : {}),
+          reveal_personal_emails: true,
+        });
+        const apolloData = await new Promise((resolve, reject) => {
+          const urlObj = new URL('https://api.apollo.io/v1/people/match');
+          const options = {
+            hostname: urlObj.hostname, path: urlObj.pathname, method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(apolloBody), 'Cache-Control': 'no-cache' }
+          };
+          const req2 = https.request(options, r => {
+            let d = ''; r.on('data', c => d += c);
+            r.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve(null); } });
+          });
+          req2.on('error', () => resolve(null));
+          req2.setTimeout(8000, () => { req2.destroy(); resolve(null); });
+          req2.write(apolloBody); req2.end();
+        });
+        if (apolloData?.person) {
+          const p2 = apolloData.person;
+          if (!result.owner_name && p2.name) result.owner_name = p2.name;
+          if (p2.email) result.owner_email = p2.email;
+          const phone = p2.phone_numbers?.[0]?.raw_number || p2.phone_numbers?.[0]?.sanitized_number;
+          if (phone) result.owner_phone = phone;
+          if (p2.name || p2.email) result.owner_source = (result.owner_source ? result.owner_source + ' + ' : '') + 'Apollo';
+        }
+      }
+
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify(result));
+    } catch(e) {
+      console.error('[enrich] error:', e.message);
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify({ ...result, error: e.message }));
+    }
+    return;
+  }
+
   res.writeHead(404); res.end('Not found');
 });
 
