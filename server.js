@@ -353,36 +353,49 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Owner lookup: IG bio parse + Facebook About scrape + Google search link
+  // Owner lookup: SunBiz address search + IG bio parse + Google search link
   if (parsed.pathname === '/enrich') {
-    const { name, website, ig_bio, facebook } = parsed.query;
+    const { name, address, ig_bio, facebook } = parsed.query;
     if (!name) { res.writeHead(400); res.end('Missing name'); return; }
     const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null, google_search_url: null };
     try {
       // Always provide a Google search link for the caller
       result.google_search_url = `https://www.google.com/search?q=${encodeURIComponent('"' + name + '" owner')}`;
 
-      // Step 1: Parse IG bio for owner mention
-      if (ig_bio) {
+      // Step 1: SunBiz address search — street address only (e.g. "4000 SW 57th Ave")
+      const street = (address||'').split(',')[0].trim();
+      if (street) {
+        try {
+          const sunbizUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?inquiryType=Address&inquiryDirectionType=ForwardList&searchNameOrder=&masterDataType=Master&searchTerm=${encodeURIComponent(street)}&listNameOrder=`;
+          const listHtml = await fetchPageDirect(sunbizUrl, 0, { 'Accept': 'text/html', 'Referer': 'https://search.sunbiz.org/' });
+          // Find first detail link
+          const linkMatch = listHtml.match(/href="(\/Inquiry\/CorporationSearch\/SearchResultDetail\?inquiryType=Address[^"]+)"/i);
+          if (linkMatch) {
+            const detailHtml = await fetchPageDirect(`https://search.sunbiz.org${linkMatch[1]}`, 0, { 'Accept': 'text/html', 'Referer': sunbizUrl });
+            // Extract registered agent name (format: LASTNAME, FIRSTNAME M)
+            const agentMatch = detailHtml.match(/Registered Agent Name[^]*?<span[^>]*>([^<]+)<\/span>/i)
+              || detailHtml.match(/([A-Z]{2,},\s+[A-Z]{2,}(?:\s+[A-Z])?)\s*\n/);
+            if (agentMatch) {
+              const raw = agentMatch[1].trim();
+              // Convert "GARCIA, ALEJANDRO J" → "Alejandro J Garcia"
+              const parts = raw.split(/,\s*/);
+              const formatted = parts.length > 1
+                ? `${parts[1].trim()} ${parts[0].trim()}`.replace(/\b\w/g, c => c.toUpperCase()).toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+                : raw.replace(/\b\w/g, c => c.toUpperCase()).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+              result.owner_name = formatted;
+              result.owner_source = 'Florida SunBiz';
+            }
+          }
+        } catch(e) { console.error('[enrich] SunBiz error:', e.message); }
+      }
+
+      // Step 2: Parse IG bio for owner mention
+      if (!result.owner_name && ig_bio) {
         const ownerMatch = ig_bio.match(/(?:owner|founder|operated by|run by|by)[:\s]+([A-Za-z]+(?: [A-Za-z]+)?)/i);
         if (ownerMatch) {
           result.owner_name = ownerMatch[1].trim();
           result.owner_source = 'Instagram bio';
         }
-      }
-
-      // Step 2: Scrape Facebook About page for owner info
-      if (!result.owner_name && facebook) {
-        const fbHandle = facebook.replace(/.*facebook\.com\//,'').replace(/\/$/, '').replace(/\?.*/,'');
-        const fbUrl = `https://www.facebook.com/${fbHandle}/about`;
-        try {
-          const fbHtml = await fetchPageDirect(fbUrl, 0, { 'Accept': 'text/html', 'Accept-Language': 'en-US,en;q=0.9' });
-          const ownerMatch = fbHtml.match(/(?:Owner|Founder|Proprietor)[^<]{0,30}?([A-Z][a-z]+ [A-Z][a-z]+)/);
-          if (ownerMatch) {
-            result.owner_name = ownerMatch[1];
-            result.owner_source = 'Facebook';
-          }
-        } catch(e) { /* Facebook blocked, skip */ }
       }
 
       res.writeHead(200, CORS);

@@ -517,6 +517,7 @@ async function enrichLead(placeId){
   if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Searching…</span>';
   const params = new URLSearchParams({
     name: lead.name,
+    address: lead.address||'',
     website: lead.website||'',
     ig_bio: lead.ig_bio||'',
     facebook: lead.facebook||'',
