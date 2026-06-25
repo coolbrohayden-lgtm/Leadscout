@@ -556,21 +556,8 @@ async function enrichLead(placeId){
     return;
   }
 
-  _pendingEnrichId = placeId;
-  if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Searching SunBiz…</span>';
-
-  // Open SunBiz with street in hash — content script picks it up
+  if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Opened SunBiz ↗</span>';
   window.open('https://search.sunbiz.org/Inquiry/CorporationSearch/ByAddress#' + encodeURIComponent(street), '_blank');
-
-  // Result comes back via window.receiveSunbizOwner() called by the extension
-  // 20s timeout fallback
-  setTimeout(() => {
-      if (_pendingEnrichId === placeId) {
-        _pendingEnrichId = null;
-        const googleUrl = `https://www.google.com/search?q=${encodeURIComponent('"'+lead.name+'" owner')}`;
-        if(cell) cell.innerHTML = `<span style="font-size:10px;color:var(--muted)">Timed out</span> <a href="${googleUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none">🔎 Google</a>`;
-      }
-    }, 20000);
 }
 
 // ── Init ──
