@@ -4,28 +4,25 @@
 (function () {
   const url = window.location.href;
 
-  // Step 1: Address search form — fill in the street and submit
+  // Step 1: Address search form — read street from URL hash, fill form, submit
   if (url.includes('ByAddress')) {
-    chrome.storage.session.get('sunbiz_street', ({ sunbiz_street }) => {
-      if (!sunbiz_street) return;
-      setTimeout(() => {
-        // Find the search input — SunBiz uses name="searchTerm" or similar
-        const input = document.querySelector('input[name="searchTerm"], input[name="SearchTerm"], input#searchTerm, input[type="text"]');
-        if (!input) {
-          chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null });
-          return;
-        }
-        input.value = sunbiz_street;
-        // Submit the form
-        const form = input.closest('form') || document.querySelector('form');
-        if (form) {
-          form.submit();
-        } else {
-          const btn = document.querySelector('input[type="submit"], button[type="submit"], button');
-          if (btn) btn.click();
-        }
-      }, 800);
-    });
+    const street = decodeURIComponent(window.location.hash.slice(1));
+    if (!street) return;
+    setTimeout(() => {
+      const input = document.querySelector('input[name="searchTerm"], input[name="SearchTerm"], input#searchTerm, input[type="text"]');
+      if (!input) {
+        chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null });
+        return;
+      }
+      input.value = street;
+      const form = input.closest('form') || document.querySelector('form');
+      if (form) {
+        form.submit();
+      } else {
+        const btn = document.querySelector('input[type="submit"], button[type="submit"], button');
+        if (btn) btn.click();
+      }
+    }, 800);
     return;
   }
 
@@ -46,21 +43,19 @@
   if (url.includes('SearchResultDetail')) {
     setTimeout(() => {
       let agentName = null;
-
-      // SunBiz detail page: find "Registered Agent Name & Address" label, then read the next content
       const allText = document.body.innerText;
 
-      // Pattern: label on one line, name on next line in ALL-CAPS
+      // Pattern: "Registered Agent Name" label followed by ALL-CAPS name on next line
       const m1 = allText.match(/Registered Agent Name[^\n]*\n\s*([A-Z]{2,}[A-Z,\s.]+)/);
       if (m1) agentName = m1[1].trim().split('\n')[0].trim();
 
-      // Fallback: scan table cells
+      // Fallback: scan elements for ALL-CAPS "LASTNAME, FIRSTNAME" near the label
       if (!agentName) {
-        const cells = document.querySelectorAll('td, span, div');
-        for (let i = 0; i < cells.length; i++) {
-          if (/Registered Agent Name/i.test(cells[i].textContent)) {
-            for (let j = i + 1; j < Math.min(i + 8, cells.length); j++) {
-              const txt = cells[j].textContent.trim();
+        const els = document.querySelectorAll('td, span, div, p');
+        for (let i = 0; i < els.length; i++) {
+          if (/Registered Agent Name/i.test(els[i].textContent)) {
+            for (let j = i + 1; j < Math.min(i + 8, els.length); j++) {
+              const txt = els[j].textContent.trim();
               if (txt && /^[A-Z]{2,},\s+[A-Z]/.test(txt)) {
                 agentName = txt;
                 break;
