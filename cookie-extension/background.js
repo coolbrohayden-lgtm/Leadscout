@@ -30,11 +30,13 @@ chrome.contextMenus.onClicked.addListener((info) => {
   const text = (info.selectionText || '').trim();
   if (!text) return;
   chrome.tabs.query({}, tabs => {
-    const lsTab = tabs.find(t => t.url && (t.url.includes('leadscout-production-f926.up.railway.app') || t.url.startsWith('http://localhost:3000')));
+    // Prefer the database tab specifically
+    const dbTab = tabs.find(t => t.url && t.url.includes('/database'));
+    const lsTab = dbTab || tabs.find(t => t.url && (t.url.includes('leadscout-production-f926.up.railway.app') || t.url.startsWith('http://localhost:3000')));
     if (!lsTab) return;
     chrome.scripting.executeScript({
       target: { tabId: lsTab.id },
-      func: (name) => { if (window.receiveSunbizOwner) window.receiveSunbizOwner(name); },
+      func: (name) => { if (window.receiveOwnerText) window.receiveOwnerText(name); },
       args: [text],
     });
   });

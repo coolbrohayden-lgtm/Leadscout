@@ -512,6 +512,19 @@ document.getElementById('apolloKeyInput').addEventListener('input', function(){
 // ── Owner enrichment ──
 let _pendingEnrichId = null;
 
+// Called by extension context menu — receives highlighted text from any page
+window.receiveOwnerText = async function(name) {
+  if (!name) return;
+  const placeId = _pendingEnrichId;
+  if (!placeId) { alert('Click "Find Owner" on a lead first, then highlight and right-click the owner name.'); return; }
+  const lead = allLeads.find(l => l.place_id === placeId);
+  const cell = document.getElementById(`owner-${placeId}`);
+  await supabaseClient.from('leads').update({ owner_name: name, owner_source: 'Manual' }).eq('place_id', placeId);
+  if (lead) { lead.owner_name = name; lead.owner_source = 'Manual'; }
+  if (cell) cell.innerHTML = `<div style="font-size:11px;font-weight:600">${name}</div><div style="font-size:9px;color:var(--muted)">Manual</div>`;
+  _pendingEnrichId = null;
+};
+
 // Called by the extension background when SunBiz result comes back
 window.receiveSunbizOwner = async function(name) {
   const placeId = _pendingEnrichId;
@@ -522,7 +535,6 @@ window.receiveSunbizOwner = async function(name) {
   const googleLink = googleUrl ? `<a href="${googleUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none">🔎 Google search</a>` : '';
 
   if (name) {
-    // Save to Supabase
     await supabaseClient.from('leads').update({ owner_name: name, owner_source: 'Florida SunBiz' }).eq('place_id', placeId);
     if (lead) { lead.owner_name = name; lead.owner_source = 'Florida SunBiz'; }
     if (cell) cell.innerHTML = `<div style="font-size:11px;font-weight:600">${name}</div><div style="font-size:9px;color:var(--muted)">Florida SunBiz</div>${googleLink}`;
