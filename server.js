@@ -359,31 +359,17 @@ const server = http.createServer(async (req, res) => {
     if (!name) { res.writeHead(400); res.end('Missing name'); return; }
     const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null, _debug: [] };
     try {
-      // Step 1: Florida SunBiz scrape (free, no key needed)
-      try {
-        const sunbizUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?inquiryType=EntityName&inquiryDirectionType=ForwardList&searchNameOrder=&masterDataType=Master&searchTerm=${encodeURIComponent(name)}&listNameOrder=`;
-        const sunbizHtml = await fetchPageDirect(sunbizUrl, 0, { 'Accept': 'text/html', 'Referer': 'https://search.sunbiz.org/' });
-        result._debug.push(`SunBiz html len: ${sunbizHtml.length}, snippet: ${sunbizHtml.slice(0,300).replace(/\s+/g,' ')}`);
-        // Extract first detail link — SunBiz uses various link formats
-        const linkMatch = sunbizHtml.match(/href="([^"]*SearchResultDetail[^"]*)"/i)
-          || sunbizHtml.match(/href="([^"]*CorporationSearch\/[^"]*Detail[^"]*)"/i);
-        result._debug.push(`SunBiz link: ${linkMatch ? linkMatch[1].slice(0,80) : 'none'}`);
-        if (linkMatch) {
-          const detailUrl = linkMatch[1].startsWith('http') ? linkMatch[1] : `https://search.sunbiz.org${linkMatch[1]}`;
-          const detailHtml = await fetchPageDirect(detailUrl, 0, { 'Accept': 'text/html', 'Referer': sunbizUrl });
-          result._debug.push(`SunBiz detail len: ${detailHtml.length}, snippet: ${detailHtml.slice(0,500).replace(/\s+/g,' ')}`);
-          // Try multiple patterns for officer/agent name
-          const officerMatch = detailHtml.match(/Officer\/Director Detail[\s\S]{0,500}?<span[^>]*>([A-Z][A-Z\s,\.]+)<\/span>/i)
-            || detailHtml.match(/Registered Agent[\s\S]{0,300}?<span[^>]*>([A-Z][A-Z\s,\.]+)<\/span>/i)
-            || detailHtml.match(/<td[^>]*>([A-Z]{2,}\s+[A-Z]{2,}(?:\s+[A-Z]{2,})?)<\/td>/);
-          result._debug.push(`SunBiz officer: ${officerMatch ? officerMatch[1] : 'none'}`);
-          if (officerMatch) {
-            const raw = officerMatch[1].trim();
-            result.owner_name = raw.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-            result.owner_source = 'Florida SunBiz';
-          }
+      // Step 1: IG bio parse for owner mention (free)
+      if (ig_bio) {
+        const ownerMatch = ig_bio.match(/(?:owner|founder|operated by|run by|by)[:\s]+([A-Z][a-z]+(?: [A-Z][a-z]+)?)/i);
+        if (ownerMatch) {
+          result.owner_name = ownerMatch[1].trim();
+          result.owner_source = 'Instagram bio';
+          result._debug.push(`IG bio owner: ${result.owner_name}`);
+        } else {
+          result._debug.push('IG bio: no owner mention found');
         }
-      } catch(e) { result._debug.push(`SunBiz error: ${e.message}`); }
+      }
 
       // Step 2: IG bio — look for owner self-tags like "Owner: Jane" or "by @jane"
       if (!result.owner_name && ig_bio) {
@@ -401,10 +387,10 @@ const server = http.createServer(async (req, res) => {
           // organizations/enrich — free tier
           const apolloBody = JSON.stringify({ api_key: apollo_key, domain });
           const apolloData = await new Promise((resolve) => {
-            const urlObj = new URL(`https://api.apollo.io/v1/organizations/enrich?api_key=${encodeURIComponent(apollo_key)}&domain=${encodeURIComponent(domain)}`);
+            const urlObj = new URL(`https://api.apollo.io/v1/organizations/enrich?domain=${encodeURIComponent(domain)}`);
             const options = {
               hostname: urlObj.hostname, path: urlObj.pathname + urlObj.search, method: 'GET',
-              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }
+              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'X-Api-Key': apollo_key }
             };
             const req2 = https.request(options, r => {
               let d = ''; r.on('data', c => d += c);
