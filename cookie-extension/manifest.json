@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "LeadScout Cookie Sync",
+  "version": "2.1",
+  "description": "Fetches Instagram and TikTok stats for LeadScout",
+  "permissions": [
+    "alarms",
+    "cookies",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://i.instagram.com/*",
+    "https://www.tiktok.com/*",
+    "http://localhost:3000/*",
+    "https://leadscout-production-f926.up.railway.app/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "https://leadscout-production-f926.up.railway.app/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://search.sunbiz.org/*"],
+      "js": ["sunbiz-content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LeadScout Cookie Sync"
+  }
+}

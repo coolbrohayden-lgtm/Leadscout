@@ -510,41 +510,81 @@ document.getElementById('apolloKeyInput').addEventListener('input', function(){
 });
 
 // ── Owner enrichment ──
+let _pendingEnrichId = null;
+
+// Called by the extension background when SunBiz result comes back
+window.receiveSunbizOwner = async function(name) {
+  const placeId = _pendingEnrichId;
+  _pendingEnrichId = null;
+  const lead = allLeads.find(l => l.place_id === placeId);
+  const cell = document.getElementById(`owner-${placeId}`);
+  const googleUrl = lead ? `https://www.google.com/search?q=${encodeURIComponent('"'+lead.name+'" owner')}` : null;
+  const googleLink = googleUrl ? `<a href="${googleUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none">🔎 Google search</a>` : '';
+
+  if (name) {
+    // Save to Supabase
+    await supabaseClient.from('leads').update({ owner_name: name, owner_source: 'Florida SunBiz' }).eq('place_id', placeId);
+    if (lead) { lead.owner_name = name; lead.owner_source = 'Florida SunBiz'; }
+    if (cell) cell.innerHTML = `<div style="font-size:11px;font-weight:600">${name}</div><div style="font-size:9px;color:var(--muted)">Florida SunBiz</div>${googleLink}`;
+  } else {
+    if (cell) cell.innerHTML = `<span style="font-size:10px;color:var(--muted)">Not found</span> ${googleLink}`;
+  }
+};
+
 async function enrichLead(placeId){
   const lead = allLeads.find(l=>l.place_id===placeId);
   if(!lead) return;
   const cell = document.getElementById(`owner-${placeId}`);
-  if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Searching…</span>';
-  const params = new URLSearchParams({
-    name: lead.name,
-    address: lead.address||'',
-    website: lead.website||'',
-    ig_bio: lead.ig_bio||'',
-    facebook: lead.facebook||'',
-  });
-  try {
-    const resp = await fetch(`/enrich?${params}`);
-    const data = await resp.json();
-    // Save to Supabase
-    const update = { owner_name: data.owner_name||null, owner_email: data.owner_email||null, owner_phone: data.owner_phone||null, owner_source: data.owner_source||null };
-    await supabaseClient.from('leads').update(update).eq('place_id', placeId);
-    // Update local cache
-    Object.assign(lead, update);
-    // Update cell
-    if(cell){
-      const googleLink = data.google_search_url ? `<a href="${data.google_search_url}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none">🔎 Google search</a>` : '';
-      if(data.owner_name || data.owner_email || data.owner_phone){
-        cell.innerHTML = `<div style="font-size:11px;font-weight:600">${data.owner_name||''}</div>
-          ${data.owner_phone?`<div style="font-size:10px;color:var(--accent)">${data.owner_phone}</div>`:''}
-          ${data.owner_email?`<div style="font-size:10px;color:var(--muted)">${data.owner_email}</div>`:''}
-          <div style="font-size:9px;color:var(--muted);margin-top:1px">${data.owner_source||''}</div>
-          ${googleLink}`;
-      } else {
-        cell.innerHTML = `<span style="font-size:10px;color:var(--muted)">Not found</span> ${googleLink}`;
-      }
+
+  // First try IG bio parse (instant, no network)
+  if (lead.ig_bio) {
+    const m = lead.ig_bio.match(/(?:owner|founder|operated by|run by|by)[:\s]+([A-Za-z]+(?: [A-Za-z]+)?)/i);
+    if (m) {
+      const name = m[1].trim();
+      await supabaseClient.from('leads').update({ owner_name: name, owner_source: 'Instagram bio' }).eq('place_id', placeId);
+      lead.owner_name = name; lead.owner_source = 'Instagram bio';
+      const googleUrl = `https://www.google.com/search?q=${encodeURIComponent('"'+lead.name+'" owner')}`;
+      if(cell) cell.innerHTML = `<div style="font-size:11px;font-weight:600">${name}</div><div style="font-size:9px;color:var(--muted)">Instagram bio</div><a href="${googleUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none">🔎 Google search</a>`;
+      return;
     }
-  } catch(e) {
-    if(cell) cell.innerHTML = `<span style="font-size:10px;color:#f66">Error: ${e.message}</span>`;
+  }
+
+  // Use extension to open SunBiz (bypasses Cloudflare)
+  const street = (lead.address||'').split(',')[0].trim();
+  if (!street) {
+    if(cell) cell.innerHTML = `<span style="font-size:10px;color:var(--muted)">No address</span>`;
+    return;
+  }
+
+  _pendingEnrichId = placeId;
+  if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Opening SunBiz…</span>';
+
+  // Ask extension to open SunBiz tab
+  const sent = await new Promise(resolve => {
+    window.postMessage({ __leadscout_ext: true, type: 'open_sunbiz', street, id: Date.now() }, '*');
+    // Listen for reply
+    const handler = e => {
+      if (e.data?.__leadscout_ext_reply) { window.removeEventListener('message', handler); resolve(true); }
+    };
+    window.addEventListener('message', handler);
+    setTimeout(() => { window.removeEventListener('message', handler); resolve(false); }, 3000);
+  });
+
+  if (!sent) {
+    _pendingEnrichId = null;
+    const googleUrl = `https://www.google.com/search?q=${encodeURIComponent('"'+lead.name+'" owner')}`;
+    if(cell) cell.innerHTML = `<span style="font-size:10px;color:var(--muted)">Extension not connected</span> <a href="${googleUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none">🔎 Google</a>`;
+  } else {
+    if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Searching SunBiz…</span>';
+    // Result will come back via window.receiveSunbizOwner()
+    // Add a 15s timeout fallback
+    setTimeout(() => {
+      if (_pendingEnrichId === placeId) {
+        _pendingEnrichId = null;
+        const googleUrl = `https://www.google.com/search?q=${encodeURIComponent('"'+lead.name+'" owner')}`;
+        if(cell) cell.innerHTML = `<span style="font-size:10px;color:var(--muted)">Timed out</span> <a href="${googleUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none">🔎 Google</a>`;
+      }
+    }, 15000);
   }
 }
 
