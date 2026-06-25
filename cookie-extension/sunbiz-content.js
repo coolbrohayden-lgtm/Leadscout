@@ -47,6 +47,8 @@
         if (cells.length < 3) continue;
         const link = cells[0].querySelector('a[href*="SearchResultDetail"]');
         if (!link) continue;
+        const docNum = cells[1]?.textContent?.trim() || '';
+        if (/^T/i.test(docNum)) continue; // skip trademarks
         const status = cells[2]?.textContent?.trim() || '';
         if (!/^active$/i.test(status)) continue;
         const entityName = cells[0].textContent.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '');
@@ -104,12 +106,34 @@
 
   function extractAgentName(html) {
     const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-    const m  = text.match(/Registered Agent Name[^A-Z]{0,80}([A-Z]{2,},\s+[A-Z]{2,}(?:\s+[A-Z])?)/);
-    const m2 = !m && text.match(/(?:President|Manager|Director|Member|Owner)[^A-Z]{0,40}([A-Z]{2,},\s+[A-Z]{2,}(?:\s+[A-Z])?)/);
-    const raw = (m || m2)?.[1]?.trim();
+
+    // Log a snippet around "Registered Agent" to see exact format
+    const idx = text.indexOf('Registered Agent');
+    if (idx >= 0) console.log('[LeadScout] Agent section:', JSON.stringify(text.slice(idx, idx + 200)));
+
+    // Try various patterns — SunBiz formats differ
+    const patterns = [
+      /Registered Agent Name\s*&\s*Address\s+([A-Z][A-Z ,.']+(?:LLC|INC|CORP)?)\s/,
+      /Registered Agent Name[^A-Z]{0,120}([A-Z]{2,}(?:,\s+[A-Z]{2,})+)/,
+      /Registered Agent\s*:\s*([A-Z][A-Za-z ,.']+)/,
+    ];
+    let raw = null;
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m?.[1]) { raw = m[1].trim(); break; }
+    }
+
+    // Fallback: officer names
+    if (!raw) {
+      const m2 = text.match(/(?:President|Manager|Director|Member|Authorized)\s+([A-Z]{2,},\s+[A-Z]{2,}(?:\s+[A-Z])?)/);
+      if (m2?.[1]) raw = m2[1].trim();
+    }
+
     if (!raw) return null;
+
+    // Format "GARCIA, ALEJANDRO J" → "Alejandro J Garcia"
     const parts = raw.split(/,\s*/);
-    if (parts.length < 2) return raw;
+    if (parts.length < 2) return raw.replace(/\b\w/g, c => c.toUpperCase()).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
     const cap = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
     const first = parts[1].trim().split(' ').map(w => w.length <= 1 ? w.toUpperCase() : cap(w)).join(' ');
     return first + ' ' + cap(parts[0].trim());
