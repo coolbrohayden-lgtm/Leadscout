@@ -363,17 +363,23 @@ const server = http.createServer(async (req, res) => {
       try {
         const sunbizUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?inquiryType=EntityName&inquiryDirectionType=ForwardList&searchNameOrder=&masterDataType=Master&searchTerm=${encodeURIComponent(name)}&listNameOrder=`;
         const sunbizHtml = await fetchPageDirect(sunbizUrl, 0, { 'Accept': 'text/html', 'Referer': 'https://search.sunbiz.org/' });
-        // Extract first result link
-        const linkMatch = sunbizHtml.match(/href="(\/Inquiry\/CorporationSearch\/SearchResultDetail[^"]+)"/);
-        result._debug.push(`SunBiz link: ${linkMatch ? linkMatch[1] : 'none'}`);
+        result._debug.push(`SunBiz html len: ${sunbizHtml.length}, snippet: ${sunbizHtml.slice(0,300).replace(/\s+/g,' ')}`);
+        // Extract first detail link — SunBiz uses various link formats
+        const linkMatch = sunbizHtml.match(/href="([^"]*SearchResultDetail[^"]*)"/i)
+          || sunbizHtml.match(/href="([^"]*CorporationSearch\/[^"]*Detail[^"]*)"/i);
+        result._debug.push(`SunBiz link: ${linkMatch ? linkMatch[1].slice(0,80) : 'none'}`);
         if (linkMatch) {
-          const detailHtml = await fetchPageDirect(`https://search.sunbiz.org${linkMatch[1]}`, 0, { 'Accept': 'text/html', 'Referer': sunbizUrl });
-          // Extract registered agent or officer names
-          const officerMatch = detailHtml.match(/(?:Registered Agent|Officer\/Director Detail)[^]*?Name:<\/label>\s*<span[^>]*>([^<]+)<\/span>/i)
-            || detailHtml.match(/title="Name">([A-Z][A-Z ,]+)<\/td>/);
-          result._debug.push(`SunBiz officer match: ${officerMatch ? officerMatch[1] : 'none'}`);
+          const detailUrl = linkMatch[1].startsWith('http') ? linkMatch[1] : `https://search.sunbiz.org${linkMatch[1]}`;
+          const detailHtml = await fetchPageDirect(detailUrl, 0, { 'Accept': 'text/html', 'Referer': sunbizUrl });
+          result._debug.push(`SunBiz detail len: ${detailHtml.length}, snippet: ${detailHtml.slice(0,500).replace(/\s+/g,' ')}`);
+          // Try multiple patterns for officer/agent name
+          const officerMatch = detailHtml.match(/Officer\/Director Detail[\s\S]{0,500}?<span[^>]*>([A-Z][A-Z\s,\.]+)<\/span>/i)
+            || detailHtml.match(/Registered Agent[\s\S]{0,300}?<span[^>]*>([A-Z][A-Z\s,\.]+)<\/span>/i)
+            || detailHtml.match(/<td[^>]*>([A-Z]{2,}\s+[A-Z]{2,}(?:\s+[A-Z]{2,})?)<\/td>/);
+          result._debug.push(`SunBiz officer: ${officerMatch ? officerMatch[1] : 'none'}`);
           if (officerMatch) {
-            result.owner_name = officerMatch[1].trim().replace(/\b\w/g, c => c.toUpperCase()).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+            const raw = officerMatch[1].trim();
+            result.owner_name = raw.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
             result.owner_source = 'Florida SunBiz';
           }
         }
@@ -408,7 +414,7 @@ const server = http.createServer(async (req, res) => {
             req2.setTimeout(8000, () => { req2.destroy(); resolve(null); });
             req2.end();
           });
-          result._debug.push(`Apollo org keys: ${apolloData ? Object.keys(apolloData).join(',') : 'null'}`);
+          result._debug.push(`Apollo org keys: ${apolloData ? Object.keys(apolloData).join(',') : 'null'} | msg: ${apolloData?.error || ''}`);
           const org = apolloData?.organization;
           if (org) {
             result._debug.push(`Apollo org: ${org.name}, contacts: ${org.contacts?.length ?? 0}`);
