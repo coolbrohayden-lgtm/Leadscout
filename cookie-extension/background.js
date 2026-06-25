@@ -61,11 +61,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (pendingSunbizTabId) target = tabs.find(t => t.id === pendingSunbizTabId);
       if (!target) target = tabs.find(t => t.url && (t.url.includes('leadscout-production-f926.up.railway.app') || t.url.startsWith('http://localhost:3000')));
       if (target) {
-        chrome.scripting.executeScript({
-          target: { tabId: target.id },
-          func: (name) => { if (window.receiveSunbizOwner) window.receiveSunbizOwner(name); },
-          args: [msg.name || null]
-        }).catch(() => {});
+        chrome.tabs.sendMessage(target.id, { type: 'owner_text', name: msg.name || null });
       }
       pendingSunbizTabId = null;
     });
