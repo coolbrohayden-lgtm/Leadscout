@@ -1,12 +1,15 @@
 (function () {
-  if (!window.location.href.includes('ByAddress')) return;
-  const street = decodeURIComponent(window.location.hash.slice(1));
-  if (!street) return;
-  setTimeout(() => {
-    const input = document.querySelector('input[type="text"]');
-    if (input) {
-      input.value = street;
-      input.focus();
-    }
-  }, 600);
+  const url = window.location.href;
+  const val = decodeURIComponent(window.location.hash.slice(1));
+  if (!val) return;
+
+  if (url.includes('ByName') || url.includes('ByAddress')) {
+    setTimeout(() => {
+      const input = document.querySelector('input[type="text"]');
+      if (input) {
+        input.value = val;
+        input.focus();
+      }
+    }, 600);
+  }
 })();
