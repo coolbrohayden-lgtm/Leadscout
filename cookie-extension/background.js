@@ -54,8 +54,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // SunBiz content script reports back the agent name
   if (msg.type === 'sunbiz_result') {
-    // Close only the SunBiz tab that sent this message
-    if (sender.tab) chrome.tabs.remove(sender.tab.id).catch(() => {});
+    // Only close the tab if we found a name — otherwise leave it open for manual right-click
+    if (msg.name && sender.tab) chrome.tabs.remove(sender.tab.id).catch(() => {});
     // Find the LeadScout tab to send result back to
     chrome.tabs.query({}, tabs => {
       let target = null;

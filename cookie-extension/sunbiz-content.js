@@ -45,8 +45,10 @@
         candidates.push({ href, entityName, nameScore });
       }
 
+      console.log('[LeadScout] SunBiz active candidates:', candidates.map(c => c.entityName));
       if (!candidates.length) {
-        chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null });
+        console.log('[LeadScout] No active candidates found — leaving tab open for manual selection');
+        // Don't send null — leave tab open so user can right-click
         return;
       }
 
