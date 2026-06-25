@@ -359,28 +359,25 @@ const server = http.createServer(async (req, res) => {
     if (!name) { res.writeHead(400); res.end('Missing name'); return; }
     const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null, _debug: [] };
     try {
-      // Step 1: OpenCorporates — search US companies by name
-      const ocUrl = `https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(name)}&country_code=us&per_page=5&format=json`;
-      const ocData = await httpsGet(ocUrl).catch(e => { result._debug.push(`OC fetch error: ${e.message}`); return null; });
-      result._debug.push(`OC status: ${ocData?.results ? 'ok' : JSON.stringify(ocData).slice(0,100)}`);
-      result._debug.push(`OC companies found: ${ocData?.results?.companies?.length ?? 0}`);
-      if (ocData?.results?.companies?.length) {
-        for (const item of ocData.results.companies) {
-          const company = item.company;
-          result._debug.push(`OC match: ${company.name} (${company.jurisdiction_code})`);
-          if (!company.opencorporates_url) continue;
-          const slug = company.opencorporates_url.replace('https://opencorporates.com/companies/','');
-          const detail = await httpsGet(`https://api.opencorporates.com/v0.4/companies/${slug}?format=json`).catch(()=>null);
-          const officers = detail?.results?.company?.officers || [];
-          result._debug.push(`OC officers for ${company.name}: ${officers.length}`);
-          const owner = officers.find(o => /owner|president|ceo|principal|member|manager|director/i.test(o.officer?.position||'')) || officers[0];
-          if (owner?.officer?.name) {
-            result.owner_name = owner.officer.name;
-            result.owner_source = `OpenCorporates (${company.jurisdiction_code})`;
-            break;
+      // Step 1: Florida SunBiz scrape (free, no key needed)
+      try {
+        const sunbizUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?inquiryType=EntityName&inquiryDirectionType=ForwardList&searchNameOrder=&masterDataType=Master&searchTerm=${encodeURIComponent(name)}&listNameOrder=`;
+        const sunbizHtml = await fetchPageDirect(sunbizUrl, 0, { 'Accept': 'text/html', 'Referer': 'https://search.sunbiz.org/' });
+        // Extract first result link
+        const linkMatch = sunbizHtml.match(/href="(\/Inquiry\/CorporationSearch\/SearchResultDetail[^"]+)"/);
+        result._debug.push(`SunBiz link: ${linkMatch ? linkMatch[1] : 'none'}`);
+        if (linkMatch) {
+          const detailHtml = await fetchPageDirect(`https://search.sunbiz.org${linkMatch[1]}`, 0, { 'Accept': 'text/html', 'Referer': sunbizUrl });
+          // Extract registered agent or officer names
+          const officerMatch = detailHtml.match(/(?:Registered Agent|Officer\/Director Detail)[^]*?Name:<\/label>\s*<span[^>]*>([^<]+)<\/span>/i)
+            || detailHtml.match(/title="Name">([A-Z][A-Z ,]+)<\/td>/);
+          result._debug.push(`SunBiz officer match: ${officerMatch ? officerMatch[1] : 'none'}`);
+          if (officerMatch) {
+            result.owner_name = officerMatch[1].trim().replace(/\b\w/g, c => c.toUpperCase()).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+            result.owner_source = 'Florida SunBiz';
           }
         }
-      }
+      } catch(e) { result._debug.push(`SunBiz error: ${e.message}`); }
 
       // Step 2: IG bio — look for owner self-tags like "Owner: Jane" or "by @jane"
       if (!result.owner_name && ig_bio) {
@@ -398,10 +395,10 @@ const server = http.createServer(async (req, res) => {
           // organizations/enrich — free tier
           const apolloBody = JSON.stringify({ api_key: apollo_key, domain });
           const apolloData = await new Promise((resolve) => {
-            const urlObj = new URL('https://api.apollo.io/v1/organizations/enrich?domain=' + encodeURIComponent(domain));
+            const urlObj = new URL(`https://api.apollo.io/v1/organizations/enrich?api_key=${encodeURIComponent(apollo_key)}&domain=${encodeURIComponent(domain)}`);
             const options = {
               hostname: urlObj.hostname, path: urlObj.pathname + urlObj.search, method: 'GET',
-              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'x-api-key': apollo_key }
+              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }
             };
             const req2 = https.request(options, r => {
               let d = ''; r.on('data', c => d += c);
