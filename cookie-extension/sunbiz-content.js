@@ -79,6 +79,6 @@
       }
 
       chrome.runtime.sendMessage({ type: 'sunbiz_result', name: agentName || null });
-    }, 1500);
+    }, 2500);
   }
 })();
