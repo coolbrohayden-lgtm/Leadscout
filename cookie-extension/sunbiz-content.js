@@ -1,15 +1,35 @@
 // Injected into search.sunbiz.org pages
-// Opens directly on SearchResults page, fetches detail page, extracts registered agent name
 
 (function () {
   const url = window.location.href;
 
-  // Results page — fetch the first detail page directly (no navigation needed)
+  // Step 1: ByAddress form — fill street from URL hash, let user click Search Now
+  if (url.includes('ByAddress')) {
+    const street = decodeURIComponent(window.location.hash.slice(1));
+    if (!street) return;
+    setTimeout(() => {
+      const input = document.querySelector('input[name="searchTerm"], input[name="SearchTerm"], input#searchTerm, input[type="text"]');
+      if (!input) return;
+      input.value = street;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.focus();
+      // Auto-submit after a short pause so user can see it
+      setTimeout(() => {
+        const btn = document.querySelector('input[type="submit"], button[type="submit"], button');
+        if (btn) btn.click();
+      }, 600);
+    }, 800);
+    return;
+  }
+
+  // Step 2: Results page — fetch first detail page behind the scenes, send name back
   if (url.includes('SearchResults')) {
     setTimeout(async () => {
       try {
         const link = document.querySelector('a[href*="SearchResultDetail"], a[href*="searchresultdetail"]');
         if (!link) {
+          // No results — leave tab open so user can see; don't close
           chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null });
           return;
         }
@@ -21,11 +41,11 @@
       } catch(e) {
         chrome.runtime.sendMessage({ type: 'sunbiz_result', name: null });
       }
-    }, 1500);
+    }, 1800);
     return;
   }
 
-  // If search returns only one result it lands directly on the detail page
+  // If search lands directly on a detail page
   if (url.includes('SearchResultDetail')) {
     setTimeout(() => {
       const name = extractAgentName(document.body.innerHTML);

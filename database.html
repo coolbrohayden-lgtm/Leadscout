@@ -560,8 +560,7 @@ async function enrichLead(placeId){
   if(cell) cell.innerHTML = '<span style="font-size:10px;color:var(--muted)">Searching SunBiz…</span>';
 
   // Open SunBiz with street in hash — content script picks it up
-  const sunbizUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?inquiryType=Address&inquiryDirectionType=ForwardList&searchNameOrder=&masterDataType=Master&searchTerm=${encodeURIComponent(street)}&listNameOrder=`;
-  window.open(sunbizUrl, '_blank');
+  window.open('https://search.sunbiz.org/Inquiry/CorporationSearch/ByAddress#' + encodeURIComponent(street), '_blank');
 
   // Result comes back via window.receiveSunbizOwner() called by the extension
   // 20s timeout fallback

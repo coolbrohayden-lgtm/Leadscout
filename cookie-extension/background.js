@@ -25,7 +25,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     pendingSunbizTabId = sender.tab ? sender.tab.id : null;
     const url = `https://search.sunbiz.org/Inquiry/CorporationSearch/ByAddress`;
     chrome.storage.session.set({ sunbiz_street: msg.street });
-    chrome.tabs.create({ url, active: false });
+    chrome.tabs.create({ url, active: true });
     sendResponse({ ok: true });
     return true;
   }
