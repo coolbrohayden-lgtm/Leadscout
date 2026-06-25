@@ -63,8 +63,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       console.log('[LeadScout] Sending owner to tab:', target?.url, '| name:', msg.name);
       if (target) {
         chrome.tabs.sendMessage(target.id, { type: 'owner_text', name: msg.name || null }, (resp) => {
-          if (chrome.runtime.lastError) console.log('[LeadScout] sendMessage error:', chrome.runtime.lastError.message);
-          else console.log('[LeadScout] sendMessage OK:', resp);
+          if (chrome.runtime.lastError) {
+            // Content script not connected (tab opened before extension reload) — fall back to executeScript
+            chrome.scripting.executeScript({
+              target: { tabId: target.id },
+              func: (n) => { if (window.receiveOwnerText) window.receiveOwnerText(n); else if (window.receiveSunbizOwner) window.receiveSunbizOwner(n); },
+              args: [msg.name || null]
+            }).catch(e => console.log('[LeadScout] executeScript also failed:', e.message));
+          }
         });
       }
       pendingSunbizTabId = null;
