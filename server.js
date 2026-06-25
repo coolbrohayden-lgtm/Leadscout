@@ -359,30 +359,25 @@ const server = http.createServer(async (req, res) => {
     if (!name) { res.writeHead(400); res.end('Missing name'); return; }
     const result = { owner_name: null, owner_email: null, owner_phone: null, owner_source: null, _debug: [] };
     try {
-      // Step 1: OpenCorporates — get officer/owner name
-      const jurisdiction = (state || 'fl').toLowerCase();
-      const ocUrl = `https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(name)}&jurisdiction_code=us_${jurisdiction}&per_page=1&format=json`;
+      // Step 1: OpenCorporates — search US companies by name
+      const ocUrl = `https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(name)}&country_code=us&per_page=5&format=json`;
       const ocData = await httpsGet(ocUrl).catch(e => { result._debug.push(`OC fetch error: ${e.message}`); return null; });
-      result._debug.push(`OC companies found: ${ocData?.results?.companies?.length ?? 'null/error'}`);
+      result._debug.push(`OC status: ${ocData?.results ? 'ok' : JSON.stringify(ocData).slice(0,100)}`);
+      result._debug.push(`OC companies found: ${ocData?.results?.companies?.length ?? 0}`);
       if (ocData?.results?.companies?.length) {
-        const company = ocData.results.companies[0].company;
-        result._debug.push(`OC company: ${company.name}, officers on search: ${company.officers?.length ?? 0}`);
-        if (company.officers?.length) {
-          const owner = company.officers.find(o => /owner|president|ceo|principal|member|manager/i.test(o.officer?.position||'')) || company.officers[0];
-          if (owner?.officer?.name) {
-            result.owner_name = owner.officer.name;
-            result.owner_source = 'OpenCorporates';
-          }
-        }
-        if (!result.owner_name && company.opencorporates_url) {
+        for (const item of ocData.results.companies) {
+          const company = item.company;
+          result._debug.push(`OC match: ${company.name} (${company.jurisdiction_code})`);
+          if (!company.opencorporates_url) continue;
           const slug = company.opencorporates_url.replace('https://opencorporates.com/companies/','');
           const detail = await httpsGet(`https://api.opencorporates.com/v0.4/companies/${slug}?format=json`).catch(()=>null);
           const officers = detail?.results?.company?.officers || [];
-          result._debug.push(`OC detail officers: ${officers.length}`);
-          const owner = officers.find(o => /owner|president|ceo|principal|member|manager/i.test(o.officer?.position||'')) || officers[0];
+          result._debug.push(`OC officers for ${company.name}: ${officers.length}`);
+          const owner = officers.find(o => /owner|president|ceo|principal|member|manager|director/i.test(o.officer?.position||'')) || officers[0];
           if (owner?.officer?.name) {
             result.owner_name = owner.officer.name;
-            result.owner_source = 'OpenCorporates';
+            result.owner_source = `OpenCorporates (${company.jurisdiction_code})`;
+            break;
           }
         }
       }
@@ -400,13 +395,13 @@ const server = http.createServer(async (req, res) => {
       if (apollo_key && website) {
         const domain = (() => { try { return new URL(website.startsWith('http') ? website : 'https://'+website).hostname.replace('www.',''); } catch(e) { return ''; } })();
         if (domain) {
-          // Use organization_top_people — available on free tier
-          const apolloBody = JSON.stringify({ api_key: apollo_key, organization_domain: domain, per_page: 1 });
+          // organizations/enrich — free tier
+          const apolloBody = JSON.stringify({ api_key: apollo_key, domain });
           const apolloData = await new Promise((resolve) => {
-            const urlObj = new URL('https://api.apollo.io/v1/mixed_people/organization_top_people');
+            const urlObj = new URL('https://api.apollo.io/v1/organizations/enrich?domain=' + encodeURIComponent(domain));
             const options = {
-              hostname: urlObj.hostname, path: urlObj.pathname, method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(apolloBody), 'Cache-Control': 'no-cache' }
+              hostname: urlObj.hostname, path: urlObj.pathname + urlObj.search, method: 'GET',
+              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'x-api-key': apollo_key }
             };
             const req2 = https.request(options, r => {
               let d = ''; r.on('data', c => d += c);
@@ -414,17 +409,20 @@ const server = http.createServer(async (req, res) => {
             });
             req2.on('error', () => resolve(null));
             req2.setTimeout(8000, () => { req2.destroy(); resolve(null); });
-            req2.write(apolloBody); req2.end();
+            req2.end();
           });
-          result._debug.push(`Apollo raw keys: ${apolloData ? Object.keys(apolloData).join(',') : 'null'}`);
-          const person = apolloData?.people?.[0] || apolloData?.contacts?.[0];
-          result._debug.push(`Apollo person: ${person?.name ?? 'none'}`);
-          if (person) {
-            if (!result.owner_name && person.name) result.owner_name = person.name;
-            if (person.email) result.owner_email = person.email;
-            const phone = person.phone_numbers?.[0]?.raw_number || person.phone_numbers?.[0]?.sanitized_number;
-            if (phone) result.owner_phone = phone;
-            result.owner_source = (result.owner_source ? result.owner_source + ' + ' : '') + 'Apollo';
+          result._debug.push(`Apollo org keys: ${apolloData ? Object.keys(apolloData).join(',') : 'null'}`);
+          const org = apolloData?.organization;
+          if (org) {
+            result._debug.push(`Apollo org: ${org.name}, contacts: ${org.contacts?.length ?? 0}`);
+            const contact = org.contacts?.[0];
+            if (contact) {
+              if (!result.owner_name) result.owner_name = contact.name || null;
+              if (contact.email) result.owner_email = contact.email;
+              const phone = contact.phone_numbers?.[0]?.raw_number;
+              if (phone) result.owner_phone = phone;
+              result.owner_source = (result.owner_source ? result.owner_source + ' + ' : '') + 'Apollo';
+            }
           }
         }
       }
