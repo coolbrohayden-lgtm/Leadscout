@@ -966,6 +966,13 @@ function extFetch(type, handle, name, city, url) {
   const {data: sharedSettings} = await supabaseClient.from('shared_settings').select('*').eq('id',1).single();
   if(sharedSettings?.google_key) document.getElementById('apiKeyInput').value = sharedSettings.google_key;
   if(sharedSettings?.rapid_key) document.getElementById('rapidApiKeyInput').value = sharedSettings.rapid_key;
+  // Lock API key inputs to admin only
+  if (!isAdmin()) {
+    ['apiKeyInput','rapidApiKeyInput'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = '••••••••••••••••'; el.disabled = true; el.style.opacity = '0.4'; el.style.cursor = 'not-allowed'; }
+    });
+  }
   // Load per-user cookies from Supabase
   const {data: profile} = await supabaseClient.from('user_profiles').select('ig_cookie,tt_cookie').eq('id', currentUser.id).single();
   if(profile?.ig_cookie) document.getElementById('igCookieInput').value = profile.ig_cookie;

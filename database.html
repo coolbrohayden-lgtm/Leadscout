@@ -972,6 +972,13 @@ function toggleAutoRefresh() {
   // Load RapidAPI key from shared_settings (same place scanner stores it)
   const { data: sharedSettings } = await supabaseClient.from('shared_settings').select('rapid_key').eq('id', 1).single();
   if (sharedSettings?.rapid_key) window._rapidApiKey = sharedSettings.rapid_key;
+  // Lock API key inputs to admin only
+  if (!isAdmin()) {
+    ['rapidApiKeyInput','apolloKeyInput'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = '••••••••••••••••'; el.disabled = true; el.style.opacity = '0.4'; el.style.cursor = 'not-allowed'; }
+    });
+  }
 
   await load();
   _lastRefresh = Date.now();

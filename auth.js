@@ -26,6 +26,12 @@ async function getUserName() {
   return (data && data.name) ? data.name : currentUser.email;
 }
 
+const ADMIN_EMAIL = 'coolbrohayden@gmail.com';
+
+function isAdmin() {
+  return currentUser && currentUser.email === ADMIN_EMAIL;
+}
+
 async function requireAuth() {
   const user = await getCurrentUser();
   if (!user) {
