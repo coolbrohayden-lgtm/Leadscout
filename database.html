@@ -650,28 +650,27 @@ function showIgPosts(event, handle) {
 
   if (_postsCache[handle]) { renderPostsPopup(handle, _postsCache[handle]); return; }
 
-  const msgId = 'igp_' + Date.now();
-  const onReply = (e) => {
-    if (!e.data?.__leadscout_ext_reply || e.data.id !== msgId) return;
-    window.removeEventListener('message', onReply);
-    const result = e.data.data;
-    if (!result || result.error) {
-      document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot)">${result?.error || 'No response from extension'}</div>`;
-      return;
-    }
-    _postsCache[handle] = result.posts;
-    renderPostsPopup(handle, result.posts);
-  };
-  window.addEventListener('message', onReply);
-  window.postMessage({ __leadscout_ext: true, type: 'fetchig_posts', handle, id: msgId }, '*');
-  // Timeout fallback
-  setTimeout(() => {
-    window.removeEventListener('message', onReply);
-    const p = document.getElementById('postsPopup');
-    if (p.style.display !== 'none' && p.innerHTML.includes('Loading')) {
-      p.innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--muted)">Extension not responding. Is it loaded?</div>`;
-    }
-  }, 8000);
+  const apiKey = localStorage.getItem('leadscout_rapidapi_key');
+  if (!apiKey) {
+    document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot)">No RapidAPI key — add it in Settings.</div>`;
+    return;
+  }
+
+  fetch(`https://flashapi1.p.rapidapi.com/ig/posts_username?user=${encodeURIComponent(handle)}&nocors=false`, {
+    headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'flashapi1.p.rapidapi.com' }
+  }).then(r => r.json()).then(json => {
+    if (json.message) throw new Error(json.message);
+    const items = json?.items || json?.data?.items || [];
+    if (!items.length) throw new Error('no posts returned — endpoint may differ: ' + JSON.stringify(json).slice(0,120));
+    const posts = items.slice(0,8).map(p => ({
+      taken_at: p.taken_at, like_count: p.like_count ?? null,
+      play_count: p.play_count ?? p.view_count ?? null, media_type: p.media_type,
+    }));
+    _postsCache[handle] = posts;
+    renderPostsPopup(handle, posts);
+  }).catch(err => {
+    document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot);font-size:10px">${err.message}</div>`;
+  });
 }
 
 function renderPostsPopup(handle, posts) {
