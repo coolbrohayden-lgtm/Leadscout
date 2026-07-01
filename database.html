@@ -96,6 +96,23 @@ tr:hover td{background:var(--surface2);}
 .posts-btn{background:none;border:none;cursor:pointer;font-size:10px;color:var(--muted);padding:0 2px;line-height:1;vertical-align:middle;}
 .posts-btn:hover{color:var(--text);}
 
+/* Script modal */
+.script-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;}
+.script-modal{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:580px;width:90%;max-height:80vh;overflow-y:auto;position:relative;}
+.script-modal h3{margin:0 0 4px 0;font-size:15px;}
+.script-modal .script-meta{font-size:11px;color:var(--muted);margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;}
+.script-modal .script-meta span{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 7px;}
+.script-modal .script-section{margin-bottom:16px;}
+.script-modal .script-section h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px 0;}
+.script-modal .script-body{font-size:13px;line-height:1.6;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 14px;}
+.script-modal .script-close{position:absolute;top:14px;right:16px;background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);}
+.script-modal .script-close:hover{color:var(--text);}
+.script-modal .copy-btn{background:var(--accent);color:#fff;border:none;border-radius:5px;padding:6px 14px;font-size:12px;cursor:pointer;margin-top:10px;}
+.script-modal .copy-btn:hover{opacity:.85;}
+.script-stat-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.script-stat-pill{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;text-align:center;}
+.script-stat-pill b{display:block;font-size:15px;color:var(--accent);}
+
 /* Blacklist section toggle */
 .section-toggle{font-size:11px;color:var(--muted);cursor:pointer;padding:8px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;}
 .section-toggle:hover{color:var(--text);}
@@ -187,6 +204,9 @@ tr:hover td{background:var(--surface2);}
 <div id="blacklistSection" style="display:none;padding:0 20px 20px;"></div>
 
 <div id="postsPopup" class="posts-popup" style="display:none"></div>
+<div id="scriptModalOverlay" class="script-modal-overlay" style="display:none" onclick="if(event.target===this)closeScriptModal()">
+  <div class="script-modal" id="scriptModalInner"></div>
+</div>
 
 <script>
 let allLeads = [];
@@ -368,8 +388,9 @@ function render(){
           </select>
         </td>
         <td><input class="notes-input" value="${(l.notes||'').replace(/"/g,'&quot;')}" placeholder="Add notes…" onblur="saveNotes('${l.place_id}',this.value)"/></td>
-        <td>
-          <button class="btn" style="font-size:10px;padding:2px 8px" onclick="deleteLead('${l.place_id}')">Delete</button>
+        <td style="white-space:nowrap">
+          <button class="btn" style="font-size:10px;padding:2px 8px" onclick="showSalesScript('${l.place_id}')">📝 Script</button>
+          <button class="btn" style="font-size:10px;padding:2px 8px;margin-top:3px" onclick="deleteLead('${l.place_id}')">Delete</button>
         </td>
       </tr>`;
     }).join('')}
@@ -706,6 +727,185 @@ document.addEventListener('click', e => {
   const popup = document.getElementById('postsPopup');
   if (popup.style.display !== 'none' && !popup.contains(e.target)) closePostsPopup();
 });
+
+// ── Sales Script Generator ──
+
+function showSalesScript(placeId) {
+  const lead = allLeads.find(l => l.place_id === placeId);
+  if (!lead) return;
+
+  let eng = null;
+  if (lead.ig_engagement) {
+    try { eng = typeof lead.ig_engagement === 'string' ? JSON.parse(lead.ig_engagement) : lead.ig_engagement; } catch(e) {}
+  }
+
+  // Compute stats
+  const followers = lead.ig_followers || 0;
+  const engRate = eng?.engagement_rate || eng?.engagement_rate_percentages || null;
+  const posts = eng?.posts_details || [];
+  const avgLikes = posts.length ? Math.round(posts.reduce((s,p)=>s+(p.likes||0),0)/posts.length) : null;
+  const avgComments = posts.length ? Math.round(posts.reduce((s,p)=>s+(p.comments||0),0)/posts.length) : null;
+
+  // Posts per month from last 12 posts
+  let postsPerMonth = null;
+  if (posts.length >= 2) {
+    const sorted = [...posts].filter(p=>p.taken_at).sort((a,b)=>b.taken_at-a.taken_at);
+    if (sorted.length >= 2) {
+      const newest = sorted[0].taken_at * 1000;
+      const oldest = sorted[sorted.length-1].taken_at * 1000;
+      const months = (newest - oldest) / (1000*60*60*24*30.5);
+      postsPerMonth = months > 0 ? Math.round(sorted.length / months) : sorted.length;
+    }
+  }
+  const lastPost = posts[0]?.time_ago || null;
+
+  // Classify size
+  const size = followers >= 10000 ? 'large' : followers >= 1000 ? 'medium' : 'small';
+  const tier = (lead.label || 'cold').toLowerCase();
+  const name = lead.name || 'this restaurant';
+  const handle = lead.instagram ? `@${lead.instagram}` : '';
+
+  const script = buildScript({ tier, size, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead });
+
+  const statPills = buildStatPills({ followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost });
+
+  const tierColor = tier === 'hot' ? 'var(--hot)' : tier === 'warm' ? 'var(--warm)' : 'var(--muted)';
+  const tierEmoji = tier === 'hot' ? '🔥' : tier === 'warm' ? '🌡️' : '❄️';
+  const sizeLabel = size === 'large' ? 'Large account' : size === 'medium' ? 'Mid-size account' : 'Small/new account';
+
+  document.getElementById('scriptModalInner').innerHTML = `
+    <button class="script-close" onclick="closeScriptModal()">✕</button>
+    <h3>${name}</h3>
+    <div class="script-meta">
+      <span style="color:${tierColor}">${tierEmoji} ${(lead.label||'COLD').toUpperCase()}</span>
+      ${handle ? `<span>${igSvg()} ${handle}</span>` : ''}
+      <span>👥 ${sizeLabel}</span>
+      ${lead.score ? `<span>⭐ Score ${lead.score}</span>` : ''}
+    </div>
+    ${statPills}
+    <div class="script-section">
+      <h4>Personalized Pitch Script</h4>
+      <div class="script-body" id="scriptText">${script}</div>
+    </div>
+    <button class="copy-btn" onclick="copyScript()">📋 Copy Script</button>
+  `;
+  document.getElementById('scriptModalOverlay').style.display = 'flex';
+}
+
+function buildStatPills({ followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost }) {
+  const pills = [];
+  if (followers) pills.push(`<div class="script-stat-pill"><b>${fmtNum(followers)}</b>Followers</div>`);
+  if (engRate != null) pills.push(`<div class="script-stat-pill"><b>${Number(engRate).toFixed(1)}%</b>Engagement</div>`);
+  if (avgLikes != null) pills.push(`<div class="script-stat-pill"><b>${fmtNum(avgLikes)}</b>Avg Likes</div>`);
+  if (avgComments != null) pills.push(`<div class="script-stat-pill"><b>${fmtNum(avgComments)}</b>Avg Comments</div>`);
+  if (postsPerMonth != null) pills.push(`<div class="script-stat-pill"><b>${postsPerMonth}x/mo</b>Post Freq</div>`);
+  if (lastPost) pills.push(`<div class="script-stat-pill"><b>${lastPost}</b>Last Post</div>`);
+  return pills.length ? `<div class="script-stat-pills">${pills.join('')}</div>` : '';
+}
+
+function buildScript({ tier, size, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead }) {
+  const foll = followers ? `${fmtNum(followers)} followers` : null;
+  const eng = engRate != null ? `${Number(engRate).toFixed(1)}%` : null;
+  const likes = avgLikes != null ? fmtNum(avgLikes) : null;
+  const ppm = postsPerMonth != null ? postsPerMonth : null;
+  const phone = lead.phone || null;
+  const owner = lead.owner_name || null;
+
+  const opener = owner ? `Hey ${owner.split(' ')[0]}, ` : `Hey, I'm reaching out to ${name} — `;
+
+  if (tier === 'hot') {
+    if (size === 'large') {
+      return `${opener}I came across ${handle || name} on Instagram${foll ? ` and saw you have ${foll}` : ''}${eng ? ` with a ${eng} engagement rate` : ''}.
+
+Honestly, your account has real potential — but I noticed${ppm ? ` you're only posting about ${ppm} time${ppm===1?'':'s'} a month` : ' the posting consistency could be stronger'}${likes ? `, and your posts are averaging ${likes} likes` : ''}. With an audience your size, that's leaving a lot of table traffic on the floor.
+
+We work specifically with restaurants to turn their Instagram presence into actual reservations and walk-ins — not just followers. We handle content, scheduling, story strategy, and growth so you don't have to think about it.
+
+Given what you already have built, I think we could 2-3x your results within 60 days.
+
+Would you be open to a quick 15-minute call to see if it's a fit?`;
+    }
+    if (size === 'medium') {
+      return `${opener}I found ${handle || name} on Instagram${foll ? ` — ${foll}` : ''}${eng ? `, ${eng} engagement` : ''}${likes ? `, averaging ${likes} likes per post` : ''}.
+
+You're in a really solid position — you've already built an audience and people are engaging. The gap right now is converting that attention into more customers walking through the door.
+
+We help restaurants like yours take that existing momentum and turn it into a consistent flow of new guests — through smarter content, targeted reels, and local audience growth.
+
+${ppm ? `At ${ppm} post${ppm===1?'':'s'}/month, there's definitely room to increase your reach without it becoming a full-time job for you.` : 'We handle the heavy lifting so you can focus on the food.'}
+
+Could I show you exactly what we'd do for your account? Takes 15 minutes.`;
+    }
+    // small + hot
+    return `${opener}I noticed ${handle || name} on Instagram${foll ? ` (${foll})` : ''}${eng ? ` with ${eng} engagement` : ''} — and I love what you're doing.
+
+Here's the thing: your engagement is actually really strong for your account size${likes ? ` — ${likes} likes per post is solid` : ''}. That means your audience genuinely cares about your food. You just need more people to see it.
+
+We work with small restaurants to grow their Instagram from a few hundred followers to thousands of real local customers — and we do it through content that actually looks good and tells your story.
+
+${lastPost ? `I saw your last post was ${lastPost} — ` : ''}Consistency is the #1 thing holding most small accounts back, and we take that off your plate completely.
+
+Want me to show you a quick example of what we'd do for your page?`;
+  }
+
+  if (tier === 'warm') {
+    if (size === 'large') {
+      return `${opener}I was looking at ${handle || name} on Instagram${foll ? ` — ${foll} followers` : ''}${eng ? `, currently at ${eng} engagement` : ''}.
+
+You clearly have the audience. The opportunity I see is that${ppm ? ` at ${ppm} post${ppm===1?'':'s'} per month` : ''}, there's room to show up more consistently and turn those followers into regulars.
+
+We specialize in restaurant social media — content strategy, reels, local targeting — all done for you. Accounts your size typically see a 40-60% boost in profile visits within the first 30 days.
+
+${likes ? `With posts averaging ${likes} likes, your content resonates — we just need to amplify it.` : 'Your content clearly resonates — we just need to amplify it.'}
+
+Open to a quick call this week?`;
+    }
+    return `${opener}I came across ${handle || name}${handle ? ' on Instagram' : ''}${foll ? ` — ${foll} followers` : ''}${eng ? `, ${eng} engagement rate` : ''}.
+
+You've got a solid base${ppm ? ` and you're posting ${ppm}x a month` : ''}, which is more than most restaurants I talk to. The next step is making sure every post is working as hard as possible to bring in new customers.
+
+We help restaurants like yours turn social media from something you do occasionally into a real customer acquisition channel — without adding hours to your week.
+
+${likes ? `Your posts are getting around ${likes} likes each — with the right strategy, we can push that significantly higher and get those posts in front of hungry locals nearby.` : 'With the right strategy, we can get your posts in front of hungry locals nearby.'}
+
+Could I jump on a quick call to walk you through what we'd do specifically for your account?`;
+  }
+
+  // cold
+  if (size === 'large') {
+    return `${opener}I found ${handle || name} on Instagram${foll ? ` with ${foll} followers` : ''}${eng ? ` — but noticed the engagement is sitting around ${eng}` : ''}.
+
+With an audience that size, you should be seeing way more traction — more reservations, more walk-ins, more people talking about your restaurant online.
+
+We work with established restaurants to reignite their social presence. Whether it's a content refresh, better use of reels, or a local growth push, we build a strategy around what actually drives foot traffic.
+
+${lastPost ? `I noticed your last post was ${lastPost} — even a simple consistency fix can make a big difference.` : 'Consistency and strategy together make a huge difference.'}
+
+Worth a 15-minute conversation?`;
+  }
+  return `${opener}I came across ${handle || name}${handle ? ' on Instagram' : ''}${foll ? ` — ${foll} followers` : ''}${eng ? `, ${eng} engagement` : ''}.
+
+I'll be honest — a lot of restaurants in your area are starting to use Instagram and TikTok seriously to bring in new customers, and the ones who get started now are going to have a big head start.
+
+We help restaurants build their social presence from scratch${foll ? ` — even at ${fmtNum(followers)} followers` : ''}, we've taken accounts and grown them to thousands of engaged local followers within a few months.
+
+${ppm && ppm < 4 ? `Posting ${ppm}x a month isn't enough to build momentum — we handle all of that for you.` : 'We handle the content, the posting, and the strategy — you just focus on the food.'}
+
+Would you be open to seeing what's possible for your restaurant?`;
+}
+
+function closeScriptModal() {
+  document.getElementById('scriptModalOverlay').style.display = 'none';
+}
+
+function copyScript() {
+  const text = document.getElementById('scriptText')?.innerText || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy Script', 2000);
+  });
+}
 
 // ── Auto-refresh ──
 let _autoRefreshTimer = null;
