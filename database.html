@@ -805,19 +805,24 @@ function buildStatPills({ followers, engRate, avgLikes, avgComments, postsPerMon
 
 function buildScript({ tier, size, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead }) {
   const foll = followers ? `${fmtNum(followers)} followers` : null;
-  const eng = engRate != null ? `${Number(engRate).toFixed(1)}%` : null;
   const likes = avgLikes != null ? fmtNum(avgLikes) : null;
   const ppm = postsPerMonth != null ? postsPerMonth : null;
-  const phone = lead.phone || null;
   const owner = lead.owner_name || null;
+
+  // Plain-English engagement explanation for owners
+  const engExplain = engRate != null
+    ? `out of every 100 people who follow you, about ${Math.round(Number(engRate))} are liking or commenting on your posts`
+    : null;
+  const engLow = engRate != null && Number(engRate) < 2;
+  const engGood = engRate != null && Number(engRate) >= 4;
 
   const opener = owner ? `Hey ${owner.split(' ')[0]}, ` : `Hey, I'm reaching out to ${name} — `;
 
   if (tier === 'hot') {
     if (size === 'large') {
-      return `${opener}I came across ${handle || name} on Instagram${foll ? ` and saw you have ${foll}` : ''}${eng ? ` with a ${eng} engagement rate` : ''}.
+      return `${opener}I came across ${handle || name} on Instagram${foll ? ` and saw you have ${foll}` : ''}.
 
-Honestly, your account has real potential — but I noticed${ppm ? ` you're only posting about ${ppm} time${ppm===1?'':'s'} a month` : ' the posting consistency could be stronger'}${likes ? `, and your posts are averaging ${likes} likes` : ''}. With an audience your size, that's leaving a lot of table traffic on the floor.
+Honestly, your account has real potential — but I noticed${ppm ? ` you're only posting about ${ppm} time${ppm===1?'':'s'} a month` : ' the posting consistency could be stronger'}${likes ? `, and your posts are averaging ${likes} likes` : ''}.${engLow && engExplain ? ` Right now ${engExplain} — which means most of your audience isn't seeing your content.` : ''} With an audience your size, that's leaving a lot of table traffic on the floor.
 
 We work specifically with restaurants to turn their Instagram presence into actual reservations and walk-ins — not just followers. We handle content, scheduling, story strategy, and growth so you don't have to think about it.
 
@@ -826,7 +831,7 @@ Given what you already have built, I think we could 2-3x your results within 60 
 Would you be open to a quick 15-minute call to see if it's a fit?`;
     }
     if (size === 'medium') {
-      return `${opener}I found ${handle || name} on Instagram${foll ? ` — ${foll}` : ''}${eng ? `, ${eng} engagement` : ''}${likes ? `, averaging ${likes} likes per post` : ''}.
+      return `${opener}I found ${handle || name} on Instagram${foll ? ` — ${foll}` : ''}${likes ? `, averaging ${likes} likes per post` : ''}.${engGood && engExplain ? ` And ${engExplain} — that's actually really strong.` : ''}
 
 You're in a really solid position — you've already built an audience and people are engaging. The gap right now is converting that attention into more customers walking through the door.
 
@@ -837,9 +842,9 @@ ${ppm ? `At ${ppm} post${ppm===1?'':'s'}/month, there's definitely room to incre
 Could I show you exactly what we'd do for your account? Takes 15 minutes.`;
     }
     // small + hot
-    return `${opener}I noticed ${handle || name} on Instagram${foll ? ` (${foll})` : ''}${eng ? ` with ${eng} engagement` : ''} — and I love what you're doing.
+    return `${opener}I noticed ${handle || name} on Instagram${foll ? ` (${foll})` : ''} — and I love what you're doing.
 
-Here's the thing: your engagement is actually really strong for your account size${likes ? ` — ${likes} likes per post is solid` : ''}. That means your audience genuinely cares about your food. You just need more people to see it.
+Here's the thing:${engGood && engExplain ? ` ${engExplain} — that's actually well above average.` : ''} ${likes ? `Your posts are getting ${likes} likes each, which` : 'That'} means your audience genuinely cares about your food. You just need more people to see it.
 
 We work with small restaurants to grow their Instagram from a few hundred followers to thousands of real local customers — and we do it through content that actually looks good and tells your story.
 
@@ -850,7 +855,7 @@ Want me to show you a quick example of what we'd do for your page?`;
 
   if (tier === 'warm') {
     if (size === 'large') {
-      return `${opener}I was looking at ${handle || name} on Instagram${foll ? ` — ${foll} followers` : ''}${eng ? `, currently at ${eng} engagement` : ''}.
+      return `${opener}I was looking at ${handle || name} on Instagram${foll ? ` — ${foll}` : ''}.${engExplain ? ` Right now ${engExplain}${engLow ? ', which means most of your followers aren\'t seeing what you post' : ''}.` : ''}
 
 You clearly have the audience. The opportunity I see is that${ppm ? ` at ${ppm} post${ppm===1?'':'s'} per month` : ''}, there's room to show up more consistently and turn those followers into regulars.
 
@@ -860,7 +865,7 @@ ${likes ? `With posts averaging ${likes} likes, your content resonates — we ju
 
 Open to a quick call this week?`;
     }
-    return `${opener}I came across ${handle || name}${handle ? ' on Instagram' : ''}${foll ? ` — ${foll} followers` : ''}${eng ? `, ${eng} engagement rate` : ''}.
+    return `${opener}I came across ${handle || name}${handle ? ' on Instagram' : ''}${foll ? ` — ${foll}` : ''}.${engExplain ? ` Currently ${engExplain}.` : ''}
 
 You've got a solid base${ppm ? ` and you're posting ${ppm}x a month` : ''}, which is more than most restaurants I talk to. The next step is making sure every post is working as hard as possible to bring in new customers.
 
@@ -873,7 +878,7 @@ Could I jump on a quick call to walk you through what we'd do specifically for y
 
   // cold
   if (size === 'large') {
-    return `${opener}I found ${handle || name} on Instagram${foll ? ` with ${foll} followers` : ''}${eng ? ` — but noticed the engagement is sitting around ${eng}` : ''}.
+    return `${opener}I found ${handle || name} on Instagram${foll ? ` with ${foll}` : ''}.${engExplain && engLow ? ` Right now ${engExplain} — meaning most of your audience scrolls right past your posts.` : ''}
 
 With an audience that size, you should be seeing way more traction — more reservations, more walk-ins, more people talking about your restaurant online.
 
@@ -883,7 +888,7 @@ ${lastPost ? `I noticed your last post was ${lastPost} — even a simple consist
 
 Worth a 15-minute conversation?`;
   }
-  return `${opener}I came across ${handle || name}${handle ? ' on Instagram' : ''}${foll ? ` — ${foll} followers` : ''}${eng ? `, ${eng} engagement` : ''}.
+  return `${opener}I came across ${handle || name}${handle ? ' on Instagram' : ''}${foll ? ` — ${foll}` : ''}.
 
 I'll be honest — a lot of restaurants in your area are starting to use Instagram and TikTok seriously to bring in new customers, and the ones who get started now are going to have a big head start.
 
