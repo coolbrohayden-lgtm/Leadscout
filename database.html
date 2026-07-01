@@ -658,29 +658,29 @@ function showIgPosts(event, handle) {
 
   fetch(`/rapidapi-ig-posts?handle=${encodeURIComponent(handle)}&key=${encodeURIComponent(apiKey)}`)
   .then(r => r.json()).then(json => {
-    if (json.message) throw new Error(json.message);
-    const items = json?.items || json?.data?.items || [];
-    if (!items.length) throw new Error('no posts returned — endpoint may differ: ' + JSON.stringify(json).slice(0,120));
-    const posts = items.slice(0,8).map(p => ({
-      taken_at: p.taken_at, like_count: p.like_count ?? null,
-      play_count: p.play_count ?? p.view_count ?? null, media_type: p.media_type,
-    }));
-    _postsCache[handle] = posts;
-    renderPostsPopup(handle, posts);
+    if (json.error) throw new Error(json.error + (json.detail ? ': ' + JSON.stringify(json.detail).slice(0,120) : ''));
+    const posts = json?.posts_details || [];
+    if (!posts.length) throw new Error('No post data returned');
+    _postsCache[handle] = { posts, engagementRate: json.engagement_rate_percentages, recentExplanation: json.recent_posts_explanation };
+    renderPostsPopup(handle, _postsCache[handle]);
   }).catch(err => {
     document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot);font-size:10px">${err.message}</div>`;
   });
 }
 
-function renderPostsPopup(handle, posts) {
+function renderPostsPopup(handle, data) {
   const popup = document.getElementById('postsPopup');
-  if (!posts || !posts.length) { popup.innerHTML += '<div style="color:var(--muted)">No posts found.</div>'; return; }
-  const rows = posts.map(p => {
-    const likes = p.like_count != null ? `❤️ ${fmtNum(p.like_count)}` : '';
-    const views = p.play_count != null ? `👁 ${fmtNum(p.play_count)}` : '';
-    return `<div class="prow">${mediaIcon(p.media_type)}<span class="pdate">${relDate(p.taken_at)}</span><span class="pstats">${[likes,views].filter(Boolean).join(' · ')}</span></div>`;
+  if (!data?.posts?.length) { popup.innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--muted)">No posts found.</div>`; return; }
+  const engLine = data.engagementRate != null
+    ? `<div style="font-size:10px;color:var(--warm);margin-bottom:8px">📊 ${data.engagementRate.toFixed(1)}% engagement · ${data.recentExplanation||''}</div>`
+    : '';
+  const rows = data.posts.map(p => {
+    return `<div class="prow">
+      <span class="pdate">${p.time_ago||relDate(p.taken_at)}</span>
+      <span class="pstats">❤️ ${fmtNum(p.likes)} · 💬 ${fmtNum(p.comments)}</span>
+    </div>`;
   }).join('');
-  popup.innerHTML = `<h4>${igSvg()} @${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4>${rows}`;
+  popup.innerHTML = `<h4>${igSvg()} @${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4>${engLine}${rows}`;
 }
 
 function closePostsPopup() {

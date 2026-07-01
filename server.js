@@ -279,7 +279,7 @@ const server = http.createServer(async (req, res) => {
     if (!handle || !key) { res.writeHead(400, CORS); res.end(JSON.stringify({ error: 'Missing handle or key' })); return; }
     try {
       const data = await new Promise((resolve, reject) => {
-        const path = `/ig/posts_username?user=${encodeURIComponent(handle)}&nocors=false`;
+        const path = `/ig/basic_engagement?user=${encodeURIComponent(handle)}`;
         const options = {
           hostname: 'flashapi1.p.rapidapi.com',
           path,
