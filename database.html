@@ -650,22 +650,28 @@ function showIgPosts(event, handle) {
 
   if (_postsCache[handle]) { renderPostsPopup(handle, _postsCache[handle]); return; }
 
-  if (typeof chrome === 'undefined' || !chrome.runtime) {
-    popup.innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--muted)">Extension not connected.</div>`;
-    return;
-  }
-  chrome.runtime.sendMessage({ type: 'fetchig_posts', handle }, result => {
-    if (chrome.runtime.lastError || !result) {
-      renderPostsPopup(handle, null);
-      return;
-    }
-    if (result.error) {
-      document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot)">Error: ${result.error}</div>`;
+  const msgId = 'igp_' + Date.now();
+  const onReply = (e) => {
+    if (!e.data?.__leadscout_ext_reply || e.data.id !== msgId) return;
+    window.removeEventListener('message', onReply);
+    const result = e.data.data;
+    if (!result || result.error) {
+      document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot)">${result?.error || 'No response from extension'}</div>`;
       return;
     }
     _postsCache[handle] = result.posts;
     renderPostsPopup(handle, result.posts);
-  });
+  };
+  window.addEventListener('message', onReply);
+  window.postMessage({ __leadscout_ext: true, type: 'fetchig_posts', handle, id: msgId }, '*');
+  // Timeout fallback
+  setTimeout(() => {
+    window.removeEventListener('message', onReply);
+    const p = document.getElementById('postsPopup');
+    if (p.style.display !== 'none' && p.innerHTML.includes('Loading')) {
+      p.innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--muted)">Extension not responding. Is it loaded?</div>`;
+    }
+  }, 8000);
 }
 
 function renderPostsPopup(handle, posts) {
