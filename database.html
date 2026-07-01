@@ -659,6 +659,7 @@ function showIgPosts(event, handle) {
   fetch(`/rapidapi-ig-posts?handle=${encodeURIComponent(handle)}&key=${encodeURIComponent(apiKey)}`)
   .then(r => r.json()).then(json => {
     console.log('[ig-posts] raw response:', JSON.stringify(json).slice(0, 500));
+    if (json.message && !json.posts_details) throw new Error('API: ' + json.message);
     if (json.error) throw new Error(json.error + (json.detail ? ': ' + JSON.stringify(json.detail).slice(0,200) : ''));
     const posts = json?.posts_details || json?.data?.posts_details || [];
     if (!posts.length) throw new Error('Keys: ' + Object.keys(json).join(', ') + ' | ' + JSON.stringify(json).slice(0,200));
