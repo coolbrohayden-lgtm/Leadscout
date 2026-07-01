@@ -780,6 +780,17 @@ select { background: var(--surface2); border: 1px solid var(--border); border-ra
         <div class="stat"><div class="v" id="statSel">0</div><div class="l">selected</div></div>
         <div class="stat"><div class="v" id="statLeads">0</div><div class="l">leads found</div></div>
       </div>
+      <div style="margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600">Business Type</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px" id="bizTypeChips">
+          <button class="fchip active" onclick="setBizType('restaurant',this)">🍽️ Restaurant</button>
+          <button class="fchip" onclick="setBizType('spa',this)">💆 Med Spa</button>
+          <button class="fchip" onclick="setBizType('hair_salon',this)">✂️ Salon</button>
+          <button class="fchip" onclick="setBizType('gym',this)">🏋️ Gym</button>
+          <button class="fchip" onclick="setBizType('__custom',this)">✏️ Custom</button>
+        </div>
+        <input id="customBizInput" type="text" placeholder="e.g. dentist, nail salon…" style="display:none;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none"/>
+      </div>
       <div class="btn-row" style="margin-bottom:6px">
         <button class="btn" onclick="clearSel()">Clear</button>
         <button class="btn btn-p" id="scanBtn" onclick="startScan()" disabled>Scan selected</button>
@@ -845,6 +856,22 @@ let igFetchMode = 'rapidapi'; // 'ext' or 'rapidapi' — set at scan start by se
 let activeFilter = 'all';
 let currentScanIds = new Set(); // place_ids found in the most recent scan
 let showCurrentScanOnly = false;
+let currentBizType = 'restaurant';
+
+function setBizType(type, btn) {
+  currentBizType = type;
+  document.querySelectorAll('#bizTypeChips .fchip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const customInput = document.getElementById('customBizInput');
+  if (type === '__custom') {
+    customInput.style.display = 'block';
+    customInput.focus();
+    currentBizType = customInput.value.trim() || '';
+    customInput.oninput = () => { currentBizType = customInput.value.trim(); };
+  } else {
+    customInput.style.display = 'none';
+  }
+}
 
 // ── IndexedDB ──
 // ── Supabase helpers ──
@@ -1305,6 +1332,7 @@ async function startScan(debugMode=false){
         tt_signal: socials._ttSignal||false,
         fb_signal: socials._fbSignal||false,
         business_email: businessEmail || null,
+        business_type: currentBizType || 'restaurant',
         score, label, reasons: reasons.join(' | '),
         status: existingLead?.status || 'new',
         scanned_at: Date.now(),
@@ -1368,9 +1396,9 @@ function dbg(msg,data){
 
 // ── Google Places (local server only — no proxy fallback) ──
 async function nearbySearch(lat,lng,radius,key){
-  dbg(`nearbySearch lat=${lat.toFixed(4)} lng=${lng.toFixed(4)} r=${Math.round(radius)}`);
+  dbg(`nearbySearch lat=${lat.toFixed(4)} lng=${lng.toFixed(4)} r=${Math.round(radius)} type=${currentBizType}`);
   try{
-    const url=`/nearbysearch?lat=${lat}&lng=${lng}&radius=${Math.round(radius)}&key=${key}`;
+    const url=`/nearbysearch?lat=${lat}&lng=${lng}&radius=${Math.round(radius)}&key=${key}&type=${encodeURIComponent(currentBizType||'restaurant')}`;
     const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
     const d=await r.json();
     if(d.error){dbg('server error',d.error);return[];}

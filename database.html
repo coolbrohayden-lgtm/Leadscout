@@ -160,6 +160,10 @@ tr:hover td{background:var(--surface2);}
     <button class="fchip"             data-f="interested" onclick="setFilter('interested')">👀 Interested</button>
     <button class="fchip fc-denied"   data-f="denied"    onclick="setFilter('denied')">🚫 Denied</button>
   </div>
+  <div class="filter-chips" style="margin-bottom:4px" id="bizTypeFilterRow">
+    <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">TYPE</span>
+    <button class="fchip active" data-f="type_all" onclick="setBizFilter('all')">All Types</button>
+  </div>
   <div class="filter-chips" style="margin-bottom:4px">
     <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">SOCIAL</span>
     <button class="fchip" data-f="no_ig"      onclick="setFilter('no_ig')">No Instagram</button>
@@ -212,6 +216,7 @@ tr:hover td{background:var(--surface2);}
 let allLeads = [];
 let blacklist = [];
 let activeFilter = 'all';
+let activeBizFilter = 'all';
 
 // ── Supabase helpers ──
 async function dbPut(store, val){
@@ -233,6 +238,7 @@ async function load(){
   blacklist = await dbAll('blacklist');
   renderStats();
   buildLocationOptions();
+  buildBizTypeChips();
   render();
   const blSection = document.getElementById('blacklistToggle');
   if(blacklist.length){ blSection.style.display='flex'; document.getElementById('blCount').textContent=blacklist.length; }
@@ -250,6 +256,30 @@ function extractCity(address){
     if(/^[A-Z]{2}\b/.test(next.trim())) return parts[i];
   }
   return parts[1]||'';
+}
+
+function buildBizTypeChips(){
+  const row = document.getElementById('bizTypeFilterRow');
+  const types = [...new Set(allLeads.map(l => l.business_type).filter(Boolean))].sort();
+  const BIZ_LABELS = {
+    restaurant:'🍽️ Restaurant', spa:'💆 Med Spa', hair_salon:'✂️ Salon',
+    nail_salon:'💅 Nail Salon', gym:'🏋️ Gym', yoga_studio:'🧘 Yoga',
+    dentist:'🦷 Dentist', cafe:'☕ Cafe', bar:'🍺 Bar',
+    barber_shop:'💈 Barber', lodging:'🏨 Hotel', car_wash:'🚗 Car Wash',
+  };
+  const chips = types.map(t => {
+    const label = BIZ_LABELS[t] || t.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    return `<button class="fchip${activeBizFilter===t?' active':''}" onclick="setBizFilter('${t}')">${label}</button>`;
+  }).join('');
+  row.innerHTML = `<span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">TYPE</span>
+    <button class="fchip${activeBizFilter==='all'?' active':''}" onclick="setBizFilter('all')">All Types</button>${chips}`;
+  row.style.display = types.length > 0 ? 'flex' : 'none';
+}
+
+function setBizFilter(type) {
+  activeBizFilter = type;
+  buildBizTypeChips();
+  render();
 }
 
 function buildLocationOptions(){
@@ -273,6 +303,7 @@ function getFiltered(){
   const sortVal=document.getElementById('sortSel')?.value||'score_desc';
   const minScore=parseInt(document.getElementById('minScoreSel')?.value||'0');
   let leads=allLeads.filter(l=>{
+    if(activeBizFilter !== 'all'){ if((l.business_type||'restaurant') !== activeBizFilter) return false; }
     if(activeFilter==='all') {}
     else if(activeFilter==='HOT'||activeFilter==='WARM'||activeFilter==='COLD'){ if(l.label!==activeFilter) return false; }
     else if(activeFilter==='new'){ if(l.status && l.status!=='new') return false; }
@@ -367,10 +398,15 @@ function render(){
            <div style="font-size:9px;color:var(--muted);margin-top:1px">${l.owner_source||''}</div>
            <button class="btn" style="font-size:8px;padding:1px 5px;margin-top:2px;opacity:0.5" onclick="clearOwner('${l.place_id}')">✕ Clear</button>`
         : `<button class="btn" style="font-size:9px;padding:2px 7px;white-space:nowrap" onclick="enrichLead('${l.place_id}')">🔍 Find Owner</button>`;
+      const BIZ_ICONS = {restaurant:'🍽️',spa:'💆',hair_salon:'✂️',nail_salon:'💅',gym:'🏋️',yoga_studio:'🧘',dentist:'🦷',cafe:'☕',bar:'🍺',barber_shop:'💈',lodging:'🏨',car_wash:'🚗'};
+      const bizType = l.business_type || 'restaurant';
+      const bizIcon = BIZ_ICONS[bizType] || '🏢';
+      const bizLabel = bizType.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
       return `<tr id="row-${l.place_id}">
         <td>
           <div style="font-weight:600">${l.name}</div>
           <span class="badge badge-${(l.label||'cold').toLowerCase()}">${l.label||'?'}</span>
+          <span style="font-size:9px;color:var(--muted);margin-left:4px">${bizIcon} ${bizLabel}</span>
           ${scanDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${scanDate}</div>`:''}
         </td>
         <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
@@ -932,6 +968,7 @@ async function autoRefresh() {
     _lastRefresh = now;
     renderStats();
     buildLocationOptions();
+    buildBizTypeChips();
     render();
     if (added) {
       const badge = document.getElementById('refreshBadge');

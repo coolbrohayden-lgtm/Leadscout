@@ -147,11 +147,26 @@ const server = http.createServer(async (req, res) => {
 
   // NEW: Nearby search using Places API (New)
   if (parsed.pathname === '/nearbysearch') {
-    const { lat, lng, radius, key } = parsed.query;
+    const { lat, lng, radius, key, type } = parsed.query;
     if (!lat || !lng || !key) { res.writeHead(400); res.end('Missing params'); return; }
+
+    // Map friendly keywords to Google Places types
+    const TYPE_MAP = {
+      'med spa': 'spa', 'medspa': 'spa', 'medical spa': 'spa',
+      'hair salon': 'hair_salon', 'nail salon': 'nail_salon',
+      'barber': 'barber_shop', 'barbershop': 'barber_shop',
+      'gym': 'gym', 'fitness': 'gym', 'yoga': 'yoga_studio',
+      'dentist': 'dentist', 'dental': 'dentist',
+      'cafe': 'cafe', 'coffee': 'cafe',
+      'bar': 'bar', 'night club': 'night_club',
+      'hotel': 'lodging', 'car wash': 'car_wash',
+    };
+    const rawType = (type || 'restaurant').toLowerCase().trim();
+    const resolvedType = TYPE_MAP[rawType] || rawType;
+
     try {
       const body = {
-        includedTypes: ['restaurant'],
+        includedTypes: [resolvedType],
         maxResultCount: 20,
         locationRestriction: {
           circle: {
