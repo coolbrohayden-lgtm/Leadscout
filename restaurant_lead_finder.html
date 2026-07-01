@@ -1133,6 +1133,21 @@ async function startScan(debugMode=false){
     dbg('Extension not connected — social searches will be skipped');
   }
 
+  // Auto-sync cookies from browser via extension before scan starts
+  if (extReady) {
+    const cookies = await extFetch('sync_cookies');
+    if (cookies?.ig_cookie) {
+      document.getElementById('igCookieInput').value = cookies.ig_cookie;
+      saveUserProfile('ig_cookie', cookies.ig_cookie);
+      dbg('✅ IG cookie auto-synced');
+    }
+    if (cookies?.tt_cookie) {
+      document.getElementById('ttCookieInput').value = cookies.tt_cookie;
+      saveUserProfile('tt_cookie', cookies.tt_cookie);
+      dbg('✅ TT cookie auto-synced');
+    }
+  }
+
   igFetchMode = extReady ? 'ext' : 'rapidapi';
   const rapidKey = document.getElementById('rapidApiKeyInput')?.value.trim();
   if(!extReady && !rapidKey) dbg('⚠️ No extension and no RapidAPI key — IG stats will be unavailable');

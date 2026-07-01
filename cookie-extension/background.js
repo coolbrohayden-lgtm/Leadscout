@@ -78,6 +78,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'sync_cookies') {
+    (async () => {
+      const igCookie = await chrome.cookies.get({ url: 'https://www.instagram.com', name: 'sessionid' });
+      const ttCookie = await chrome.cookies.get({ url: 'https://www.tiktok.com', name: 'sessionid' });
+      sendResponse({
+        ig_cookie: igCookie ? `sessionid=${igCookie.value}` : null,
+        tt_cookie: ttCookie ? `sessionid=${ttCookie.value}` : null,
+      });
+    })();
+    return true;
+  }
+
   if (msg.type === 'set_rapidapi_key') {
     chrome.storage.local.set({ rapidapi_key: msg.key });
     sendResponse({ ok: true });
