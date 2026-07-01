@@ -260,7 +260,8 @@ function extractCity(address){
 
 function buildBizTypeChips(){
   const row = document.getElementById('bizTypeFilterRow');
-  const types = [...new Set(allLeads.map(l => l.business_type).filter(Boolean))].sort();
+  // Treat null/missing business_type as 'restaurant'
+  const types = [...new Set(allLeads.map(l => l.business_type || 'restaurant'))].sort();
   const BIZ_LABELS = {
     restaurant:'🍽️ Restaurant', spa:'💆 Med Spa', hair_salon:'✂️ Salon',
     nail_salon:'💅 Nail Salon', gym:'🏋️ Gym', yoga_studio:'🧘 Yoga',
@@ -402,9 +403,10 @@ function render(){
       const bizType = l.business_type || 'restaurant';
       const bizIcon = BIZ_ICONS[bizType] || '🏢';
       const bizLabel = bizType.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-      return `<tr id="row-${l.place_id}">
+      const wasExported = _exportedIds.has(l.place_id);
+      return `<tr id="row-${l.place_id}"${wasExported?' style="opacity:0.6"':''}>
         <td>
-          <div style="font-weight:600">${l.name}</div>
+          <div style="font-weight:600">${l.name}${wasExported?' <span title="Already exported" style="color:#4ade80;font-size:11px">✓</span>':''}</div>
           <span class="badge badge-${(l.label||'cold').toLowerCase()}">${l.label||'?'}</span>
           <span style="font-size:9px;color:var(--muted);margin-left:4px">${bizIcon} ${bizLabel}</span>
           ${scanDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${scanDate}</div>`:''}
@@ -543,6 +545,13 @@ function parseAddress(address){
 }
 function esc(v){ return `"${String(v||'').replace(/"/g,'""')}"`; }
 
+let _exportedIds = new Set(JSON.parse(localStorage.getItem('leadscout_exported')||'[]'));
+
+function markExported(ids){
+  ids.forEach(id => _exportedIds.add(id));
+  localStorage.setItem('leadscout_exported', JSON.stringify([..._exportedIds]));
+}
+
 function exportCSV(){
   const leads=getFiltered();
   const header=['title','totalScore','reviewsCount','street','city','state','countryCode','website','phone','instagram','ig_followers','tiktok','tt_followers','facebook','leadScore','label','status','notes','ownerName','ownerPhone','ownerEmail'];
@@ -576,6 +585,8 @@ function exportCSV(){
   const ts=new Date().toISOString().slice(0,10).replace(/-/g,'');
   a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
   a.download=`leadscout_${ts}.csv`; a.click();
+  markExported(leads.map(l=>l.place_id));
+  render(); // refresh to show checkmarks
 }
 
 // ── Settings panel ──
@@ -801,10 +812,11 @@ function showSalesScript(placeId) {
   // Classify size
   const size = followers >= 10000 ? 'large' : followers >= 1000 ? 'medium' : 'small';
   const tier = (lead.label || 'cold').toLowerCase();
-  const name = lead.name || 'this restaurant';
+  const bizType = lead.business_type || 'restaurant';
+  const name = lead.name || 'this business';
   const handle = lead.instagram ? `@${lead.instagram}` : '';
 
-  const script = buildScript({ tier, size, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead });
+  const script = buildScript({ tier, size, bizType, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead });
 
   const statPills = buildStatPills({ followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost });
 
@@ -842,11 +854,45 @@ function buildStatPills({ followers, engRate, avgLikes, avgComments, postsPerMon
   return pills.length ? `<div class="script-stat-pills">${pills.join('')}</div>` : '';
 }
 
-function buildScript({ tier, size, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead }) {
+function buildScript({ tier, size, bizType, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead }) {
   const foll = followers ? `${fmtNum(followers)} followers` : null;
   const likes = avgLikes != null ? fmtNum(avgLikes) : null;
   const ppm = postsPerMonth != null ? postsPerMonth : null;
   const owner = lead.owner_name || null;
+
+  // Niche-specific language
+  const isSpa = /spa|aesthetic|medspa|med.spa|laser|beauty|wellness/i.test(bizType);
+  const isGym = /gym|fitness|yoga|pilates|crossfit/i.test(bizType);
+  const isSalon = /salon|hair|barber|nail/i.test(bizType);
+  const niche = isSpa ? 'spa' : isGym ? 'gym' : isSalon ? 'salon' : 'restaurant';
+
+  const NICHE = {
+    spa: {
+      clients: 'clients', product: 'treatments', action: 'book appointments',
+      pitch: 'turn their Instagram into a steady stream of new clients booking injectables, facials, and body treatments',
+      gap: 'clients are searching for med spas on Instagram every day — if you\'re not showing up, they\'re booking with someone else',
+      cta: 'Would you be open to a quick call to see what we\'d do for your account?'
+    },
+    gym: {
+      clients: 'members', product: 'classes & training', action: 'sign up for memberships',
+      pitch: 'use Instagram and TikTok to drive new member sign-ups and keep current members engaged',
+      gap: 'people look for gyms and trainers on social media before they ever Google you',
+      cta: 'Can I show you what that looks like for a gym like yours?'
+    },
+    salon: {
+      clients: 'clients', product: 'services', action: 'book appointments',
+      pitch: 'grow their client base through Instagram — showcasing their work to attract new bookings on autopilot',
+      gap: 'salons that post consistently on Instagram fill their chairs way faster than ones that don\'t',
+      cta: 'Would you want to see what we\'d create for your account?'
+    },
+    restaurant: {
+      clients: 'customers', product: 'food & experience', action: 'walk in or make reservations',
+      pitch: 'turn their Instagram presence into actual reservations and walk-ins — not just followers',
+      gap: 'people decide where to eat based on what they see on Instagram',
+      cta: 'Would you be open to a quick 15-minute call to see if it\'s a fit?'
+    },
+  };
+  const N = NICHE[niche];
 
   // Plain-English engagement explanation for owners
   const engExplain = engRate != null
@@ -867,25 +913,25 @@ We work specifically with restaurants to turn their Instagram presence into actu
 
 Given what you already have built, I think we could 2-3x your results within 60 days.
 
-Would you be open to a quick 15-minute call to see if it's a fit?`;
+${N.cta}`;
     }
     if (size === 'medium') {
       return `${opener}I found ${handle || name} on Instagram${foll ? ` — ${foll}` : ''}${likes ? `, averaging ${likes} likes per post` : ''}.${engGood && engExplain ? ` And ${engExplain} — that's actually really strong.` : ''}
 
-You're in a really solid position — you've already built an audience and people are engaging. The gap right now is converting that attention into more customers walking through the door.
+You're in a really solid position — you've already built an audience and people are engaging. The gap right now is converting that attention into more ${N.clients} walking through the door.
 
-We help restaurants like yours take that existing momentum and turn it into a consistent flow of new guests — through smarter content, targeted reels, and local audience growth.
+We help ${niche === 'restaurant' ? 'restaurants' : 'businesses'} like yours take that existing momentum and turn it into a consistent flow of new ${N.clients} — through smarter content, targeted reels, and local audience growth.
 
-${ppm ? `At ${ppm} post${ppm===1?'':'s'}/month, there's definitely room to increase your reach without it becoming a full-time job for you.` : 'We handle the heavy lifting so you can focus on the food.'}
+${ppm ? `At ${ppm} post${ppm===1?'':'s'}/month, there's definitely room to increase your reach without it becoming a full-time job for you.` : `We handle the heavy lifting so you can focus on your ${N.product}.`}
 
 Could I show you exactly what we'd do for your account? Takes 15 minutes.`;
     }
     // small + hot
     return `${opener}I noticed ${handle || name} on Instagram${foll ? ` (${foll})` : ''} — and I love what you're doing.
 
-Here's the thing:${engGood && engExplain ? ` ${engExplain} — that's actually well above average.` : ''} ${likes ? `Your posts are getting ${likes} likes each, which` : 'That'} means your audience genuinely cares about your food. You just need more people to see it.
+Here's the thing:${engGood && engExplain ? ` ${engExplain} — that's actually well above average.` : ''} ${likes ? `Your posts are getting ${likes} likes each, which` : 'That'} means your audience genuinely cares about what you do. You just need more people to see it.
 
-We work with small restaurants to grow their Instagram from a few hundred followers to thousands of real local customers — and we do it through content that actually looks good and tells your story.
+We work with small ${niche === 'restaurant' ? 'restaurants' : `${niche}s`} to grow their Instagram from a few hundred followers to thousands of real local ${N.clients} — and we do it through content that actually looks good and tells your story.
 
 ${lastPost ? `I saw your last post was ${lastPost} — ` : ''}Consistency is the #1 thing holding most small accounts back, and we take that off your plate completely.
 
@@ -894,11 +940,11 @@ Want me to show you a quick example of what we'd do for your page?`;
 
   if (tier === 'warm') {
     if (size === 'large') {
-      return `${opener}I was looking at ${handle || name} on Instagram${foll ? ` — ${foll}` : ''}.${engExplain ? ` Right now ${engExplain}${engLow ? ', which means most of your followers aren\'t seeing what you post' : ''}.` : ''}
+      return `${opener}I was looking at ${handle || name} on Instagram${foll ? ` — ${foll}` : ''}.${engExplain ? ` Right now ${engExplain}${engLow ? `, which means most of your followers aren't seeing what you post` : ''}.` : ''}
 
-You clearly have the audience. The opportunity I see is that${ppm ? ` at ${ppm} post${ppm===1?'':'s'} per month` : ''}, there's room to show up more consistently and turn those followers into regulars.
+You clearly have the audience. The opportunity I see is that${ppm ? ` at ${ppm} post${ppm===1?'':'s'} per month` : ''}, there's room to show up more consistently and turn those followers into paying ${N.clients}.
 
-We specialize in restaurant social media — content strategy, reels, local targeting — all done for you. Accounts your size typically see a 40-60% boost in profile visits within the first 30 days.
+We specialize in social media for ${niche === 'restaurant' ? 'restaurants' : `${niche}s`} — content strategy, reels, local targeting — all done for you. Accounts your size typically see a 40-60% boost in profile visits within the first 30 days.
 
 ${likes ? `With posts averaging ${likes} likes, your content resonates — we just need to amplify it.` : 'Your content clearly resonates — we just need to amplify it.'}
 
@@ -906,11 +952,11 @@ Open to a quick call this week?`;
     }
     return `${opener}I came across ${handle || name}${handle ? ' on Instagram' : ''}${foll ? ` — ${foll}` : ''}.${engExplain ? ` Currently ${engExplain}.` : ''}
 
-You've got a solid base${ppm ? ` and you're posting ${ppm}x a month` : ''}, which is more than most restaurants I talk to. The next step is making sure every post is working as hard as possible to bring in new customers.
+You've got a solid base${ppm ? ` and you're posting ${ppm}x a month` : ''}, which is more than most ${niche === 'restaurant' ? 'restaurants' : 'businesses'} I talk to. The next step is making sure every post is working as hard as possible to help ${N.action}.
 
-We help restaurants like yours turn social media from something you do occasionally into a real customer acquisition channel — without adding hours to your week.
+We help ${niche === 'restaurant' ? 'restaurants' : 'businesses'} like yours turn social media from something you do occasionally into a real ${N.clients} acquisition channel — without adding hours to your week.
 
-${likes ? `Your posts are getting around ${likes} likes each — with the right strategy, we can push that significantly higher and get those posts in front of hungry locals nearby.` : 'With the right strategy, we can get your posts in front of hungry locals nearby.'}
+${likes ? `Your posts are getting around ${likes} likes each — with the right strategy, we can push that significantly higher and get in front of locals searching for ${niche === 'restaurant' ? 'places to eat' : `a ${bizType.replace(/_/g,' ')}`} nearby.` : `With the right strategy, we can get your posts in front of locals actively searching for ${niche === 'restaurant' ? 'places to eat' : `a ${bizType.replace(/_/g,' ')}`} nearby.`}
 
 Could I jump on a quick call to walk you through what we'd do specifically for your account?`;
   }
@@ -919,9 +965,9 @@ Could I jump on a quick call to walk you through what we'd do specifically for y
   if (size === 'large') {
     return `${opener}I found ${handle || name} on Instagram${foll ? ` with ${foll}` : ''}.${engExplain && engLow ? ` Right now ${engExplain} — meaning most of your audience scrolls right past your posts.` : ''}
 
-With an audience that size, you should be seeing way more traction — more reservations, more walk-ins, more people talking about your restaurant online.
+With an audience that size, you should be seeing way more traction — more ${N.clients}, more bookings, more people talking about you online.
 
-We work with established restaurants to reignite their social presence. Whether it's a content refresh, better use of reels, or a local growth push, we build a strategy around what actually drives foot traffic.
+We work with established ${niche === 'restaurant' ? 'restaurants' : 'businesses'} to reignite their social presence. Whether it's a content refresh, better use of reels, or a local growth push, we build a strategy around what actually drives ${N.clients}.
 
 ${lastPost ? `I noticed your last post was ${lastPost} — even a simple consistency fix can make a big difference.` : 'Consistency and strategy together make a huge difference.'}
 
@@ -929,13 +975,13 @@ Worth a 15-minute conversation?`;
   }
   return `${opener}I came across ${handle || name}${handle ? ' on Instagram' : ''}${foll ? ` — ${foll}` : ''}.
 
-I'll be honest — a lot of restaurants in your area are starting to use Instagram and TikTok seriously to bring in new customers, and the ones who get started now are going to have a big head start.
+I'll be honest — ${N.gap}, and the businesses that get serious about it now are going to have a big head start on everyone else in their area.
 
-We help restaurants build their social presence from scratch${foll ? ` — even at ${fmtNum(followers)} followers` : ''}, we've taken accounts and grown them to thousands of engaged local followers within a few months.
+We help ${niche === 'restaurant' ? 'restaurants' : `${bizType.replace(/_/g,' ')}s`} build their social presence from scratch${foll ? ` — even at ${fmtNum(followers)} followers` : ''}, we've taken accounts and grown them to thousands of engaged local ${N.clients} within a few months.
 
-${ppm && ppm < 4 ? `Posting ${ppm}x a month isn't enough to build momentum — we handle all of that for you.` : 'We handle the content, the posting, and the strategy — you just focus on the food.'}
+${ppm && ppm < 4 ? `Posting ${ppm}x a month isn't enough to build momentum — we handle all of that for you.` : `We handle the content, the posting, and the strategy — you just focus on your ${N.product}.`}
 
-Would you be open to seeing what's possible for your restaurant?`;
+Would you be open to seeing what's possible for your business?`;
 }
 
 function closeScriptModal() {
