@@ -646,7 +646,7 @@ function showIgPosts(event, handle) {
 
   // Position below the button
   popup.style.left = Math.min(rect.left, window.innerWidth - 300) + 'px';
-  popup.style.top = (rect.bottom + 6 + window.scrollY) + 'px';
+  popup.style.top = (rect.bottom + 6) + 'px';
 
   if (_postsCache[handle]) { renderPostsPopup(handle, _postsCache[handle]); return; }
 
