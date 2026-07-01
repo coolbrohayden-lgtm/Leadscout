@@ -109,6 +109,8 @@ tr:hover td{background:var(--surface2);}
   <div class="logo">Lead<span>Scout</span></div>
   <a href="/" class="back-btn">← Back to Map</a>
   <div class="hdr-right">
+    <button class="btn" onclick="toggleAutoRefresh()" style="display:flex;align-items:center;gap:5px"><span id="refreshDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block"></span>Live</button>
+    <span id="refreshBadge" style="font-size:10px;color:var(--cold);opacity:0;transition:opacity .4s"></span>
     <button class="btn" onclick="exportCSV()">Export CSV</button>
     <button class="btn" onclick="toggleSettings()" id="settingsBtn" style="display:none"></button>
     <button class="btn btn-danger" onclick="clearDenied()">Clear Denied</button>
@@ -705,6 +707,45 @@ document.addEventListener('click', e => {
   if (popup.style.display !== 'none' && !popup.contains(e.target)) closePostsPopup();
 });
 
+// ── Auto-refresh ──
+let _autoRefreshTimer = null;
+let _lastRefresh = 0;
+
+async function autoRefresh() {
+  const now = Date.now();
+  const { data: newLeads } = await supabaseClient.from('leads').select('*').gt('scanned_at', _lastRefresh);
+  if (newLeads?.length) {
+    let added = 0;
+    for (const lead of newLeads) {
+      const idx = allLeads.findIndex(l => l.place_id === lead.place_id);
+      if (idx === -1) { allLeads.push(lead); added++; }
+      else allLeads[idx] = { ...allLeads[idx], ...lead };
+    }
+    _lastRefresh = now;
+    renderStats();
+    buildLocationOptions();
+    render();
+    if (added) {
+      const badge = document.getElementById('refreshBadge');
+      if (badge) { badge.textContent = `+${added} new`; badge.style.opacity = '1'; setTimeout(() => badge.style.opacity = '0', 2000); }
+    }
+  }
+}
+
+function startAutoRefresh() {
+  _lastRefresh = Date.now();
+  _autoRefreshTimer = setInterval(autoRefresh, 15000);
+  document.getElementById('refreshDot').style.background = 'var(--cold)';
+}
+function stopAutoRefresh() {
+  clearInterval(_autoRefreshTimer);
+  _autoRefreshTimer = null;
+  document.getElementById('refreshDot').style.background = 'var(--muted)';
+}
+function toggleAutoRefresh() {
+  _autoRefreshTimer ? stopAutoRefresh() : startAutoRefresh();
+}
+
 // ── Init ──
 (async () => {
   const user = await requireAuth();
@@ -725,6 +766,7 @@ document.addEventListener('click', e => {
   if (sharedSettings?.rapid_key) window._rapidApiKey = sharedSettings.rapid_key;
 
   await load();
+  _lastRefresh = Date.now();
 })();
 </script>
 </body>
