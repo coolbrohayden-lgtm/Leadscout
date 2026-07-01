@@ -650,9 +650,9 @@ function showIgPosts(event, handle) {
 
   if (_postsCache[handle]) { renderPostsPopup(handle, _postsCache[handle]); return; }
 
-  const apiKey = localStorage.getItem('leadscout_rapidapi_key');
+  const apiKey = window._rapidApiKey || localStorage.getItem('leadscout_rapidapi_key');
   if (!apiKey) {
-    document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot)">No RapidAPI key — add it in Settings.</div>`;
+    document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot)">No RapidAPI key found. Add it in the Scanner page settings.</div>`;
     return;
   }
 
@@ -707,6 +707,10 @@ document.addEventListener('click', e => {
     document.getElementById('rapidApiKeyInput').value = savedRapid;
     window.postMessage({ __leadscout_ext: true, type: 'set_rapidapi_key', key: savedRapid }, '*');
   }
+  // Load RapidAPI key from shared_settings (same place scanner stores it)
+  const { data: sharedSettings } = await supabaseClient.from('shared_settings').select('rapid_key').eq('id', 1).single();
+  if (sharedSettings?.rapid_key) window._rapidApiKey = sharedSettings.rapid_key;
+
   await load();
 })();
 </script>
