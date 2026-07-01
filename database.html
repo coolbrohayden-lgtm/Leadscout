@@ -384,11 +384,13 @@ function render(){
     ${leads.map(l=>{
       const status=l.status||'new';
       const igPostsBtn=l.instagram?`<button class="posts-btn" title="View recent posts" onclick="showIgPosts(event,'${l.instagram}')">📅</button>`:'';
-      const ig=l.instagram?`<a class="pill pill-ig" href="https://instagram.com/${l.instagram}" target="_blank">${igSvg()} @${l.instagram}</a>${igPostsBtn}`
+      const igFollowers = l.ig_followers ? `<span style="font-size:9px;color:var(--muted)">${fmtFollowers(l.ig_followers)} followers</span>` : '';
+      const ttFollowers = l.tt_followers ? `<span style="font-size:9px;color:var(--muted)">${fmtFollowers(l.tt_followers)} followers</span>` : '';
+      const ig=l.instagram?`<div style="margin-bottom:2px"><a class="pill pill-ig" href="https://instagram.com/${l.instagram}" target="_blank">${igSvg()} @${l.instagram}</a>${igPostsBtn} ${igFollowers}</div>`
         :l.ig_signal?`<span class="pill pill-ig pill-dim">${igSvg()} IG?</span>`:'';
-      const tt=l.tiktok?`<a class="pill pill-tt" href="https://tiktok.com/@${l.tiktok}" target="_blank">${ttSvg()} @${l.tiktok}</a>`
+      const tt=l.tiktok?`<div style="margin-bottom:2px"><a class="pill pill-tt" href="https://tiktok.com/@${l.tiktok}" target="_blank">${ttSvg()} @${l.tiktok}</a> ${ttFollowers}</div>`
         :l.tt_signal?`<span class="pill pill-tt pill-dim">${ttSvg()} TT?</span>`:'';
-      const fb=l.facebook?`<a class="pill pill-fb" href="https://facebook.com/${l.facebook}" target="_blank">${fbSvg()} FB</a>`
+      const fb=l.facebook?`<div><a class="pill pill-fb" href="https://facebook.com/${l.facebook}" target="_blank">${fbSvg()} FB</a></div>`
         :l.fb_signal?`<span class="pill pill-fb pill-dim">${fbSvg()} FB?</span>`:'';
       const website=l.website?`<a href="${l.website}" target="_blank" style="color:var(--muted);font-size:10px;text-decoration:none">🌐</a>`:'';
       const scanDate=l.scanned_at?new Date(l.scanned_at).toLocaleDateString():'';
@@ -696,6 +698,13 @@ function relDate(ts) {
 }
 function fmtNum(n) {
   if (n == null) return '';
+  if (n >= 1000000) return (n/1000000).toFixed(1).replace(/\.0$/,'')+'M';
+  if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'')+'k';
+  return String(n);
+}
+function fmtFollowers(n) {
+  if (!n) return '';
+  n = parseInt(n);
   if (n >= 1000000) return (n/1000000).toFixed(1).replace(/\.0$/,'')+'M';
   if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'')+'k';
   return String(n);
@@ -1069,3 +1078,4 @@ function toggleAutoRefresh() {
 </script>
 </body>
 </html>
+
