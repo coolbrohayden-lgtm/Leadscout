@@ -1249,6 +1249,7 @@ async function startScan(debugMode=false){
       const igStats = ig ? await scrapeIgStats(ig) : {followers:null,posts:null,bio:''};
       const igEngagement = ig && rapidKey ? await fetchIgEngagement(ig, rapidKey) : null;
       const ttStats = socials.tiktok ? await scrapeTikTokStats(socials.tiktok) : {followers:null,totalLikes:null,bio:''};
+      const businessEmail = website ? await scrapeBusinessEmail(website) : null;
 
       const igBioCheck = checkBioLocation(igStats.bio, city, address);
       const ttBioCheck = checkBioLocation(ttStats.bio, city, address);
@@ -1281,6 +1282,7 @@ async function startScan(debugMode=false){
         ig_signal: socials._igSignal||false,
         tt_signal: socials._ttSignal||false,
         fb_signal: socials._fbSignal||false,
+        business_email: businessEmail || null,
         score, label, reasons: reasons.join(' | '),
         status: existingLead?.status || 'new',
         scanned_at: Date.now(),
@@ -1539,6 +1541,14 @@ function parseSocialNum(str){
   if(/[Kk]$/i.test(s)) return Math.round(parseFloat(s)*1000);
   const n=parseInt(s);
   return isNaN(n)?null:n;
+}
+
+async function scrapeBusinessEmail(website) {
+  try {
+    const r = await fetch(`/scrape-email?website=${encodeURIComponent(website)}`);
+    const json = await r.json();
+    return json.primary || null;
+  } catch(e) { return null; }
 }
 
 async function fetchIgEngagement(handle, key) {

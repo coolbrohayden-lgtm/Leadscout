@@ -357,6 +357,40 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Scrape business email from website
+  if (parsed.pathname === '/scrape-email') {
+    const { website } = parsed.query;
+    if (!website) { res.writeHead(400, CORS); res.end(JSON.stringify({ error: 'Missing website' })); return; }
+    const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+    const skipDomains = ['sentry.io','wixpress.com','squarespace.com','shopify.com','wordpress.com','example.com','domain.com','email.com','youremail','yourname','name@','info@info','test@','noreply','no-reply','donotreply','support@support','admin@admin','placeholder'];
+    const found = new Set();
+
+    async function scrapeUrl(pageUrl) {
+      try {
+        const html = await fetchPageDirect(pageUrl, 0, {}, false);
+        const matches = html.match(emailRegex) || [];
+        for (const e of matches) {
+          const lower = e.toLowerCase();
+          if (!skipDomains.some(s => lower.includes(s))) found.add(lower);
+        }
+      } catch(e) {}
+    }
+
+    try {
+      const base = website.replace(/\/$/, '');
+      await scrapeUrl(base);
+      if (found.size === 0) {
+        await Promise.all(['/contact', '/about', '/contact-us', '/about-us'].map(p => scrapeUrl(base + p)));
+      }
+      const emails = [...found].slice(0, 5);
+      res.writeHead(200, { ...CORS, 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ emails, primary: emails[0] || null }));
+    } catch(e) {
+      res.writeHead(500, CORS); res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // Fetch any external page server-side (bypasses CORS + proxy blocks)
   if (parsed.pathname === '/fetchpage') {
     const { url } = parsed.query;

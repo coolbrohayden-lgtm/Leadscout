@@ -374,7 +374,10 @@ function render(){
           ${scanDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${scanDate}</div>`:''}
         </td>
         <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
-        <td style="white-space:nowrap">${l.phone||'—'}</td>
+        <td style="white-space:nowrap">
+          ${l.phone||'—'}
+          ${l.business_email?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><a href="mailto:${l.business_email}" style="color:var(--muted);text-decoration:none">✉️ ${l.business_email}</a></div>`:''}
+        </td>
         <td style="min-width:140px" id="owner-${l.place_id}">${ownerHtml}</td>
         <td style="font-weight:700;color:var(--accent)">${l.score||0}</td>
         <td>${ig}${tt}${fb}</td>
