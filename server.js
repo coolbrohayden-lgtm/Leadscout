@@ -273,6 +273,42 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // FlashAPI — IG recent posts proxy
+  if (parsed.pathname === '/rapidapi-ig-posts') {
+    const { handle, key } = parsed.query;
+    if (!handle || !key) { res.writeHead(400, CORS); res.end(JSON.stringify({ error: 'Missing handle or key' })); return; }
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const path = `/ig/posts_username?user=${encodeURIComponent(handle)}&nocors=false`;
+        const options = {
+          hostname: 'flashapi1.p.rapidapi.com',
+          path,
+          method: 'GET',
+          headers: { 'x-rapidapi-host': 'flashapi1.p.rapidapi.com', 'x-rapidapi-key': key },
+        };
+        const req = https.request(options, (r) => {
+          let d = '';
+          r.on('data', c => d += c);
+          r.on('end', () => {
+            console.log(`[ig-posts] @${handle} status=${r.statusCode} body=${d.slice(0,200)}`);
+            try { resolve({ status: r.statusCode, body: JSON.parse(d) }); }
+            catch(e) { resolve({ status: r.statusCode, raw: d.slice(0,500) }); }
+          });
+        });
+        req.on('error', reject);
+        req.setTimeout(12000, () => { req.destroy(); reject(new Error('timeout')); });
+        req.end();
+      });
+      res.writeHead(200, CORS);
+      if (data.status !== 200) { res.end(JSON.stringify({ error: `FlashAPI HTTP ${data.status}`, detail: data.body || data.raw })); return; }
+      res.end(JSON.stringify(data.body));
+    } catch(e) {
+      console.error('[ig-posts] error:', e.message);
+      res.writeHead(500, CORS); res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // Fetch Instagram profile JSON via internal API
   if (parsed.pathname === '/fetchig') {
     const { handle, cookie } = parsed.query;

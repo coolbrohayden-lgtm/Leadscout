@@ -656,9 +656,8 @@ function showIgPosts(event, handle) {
     return;
   }
 
-  fetch(`https://flashapi1.p.rapidapi.com/ig/posts_username?user=${encodeURIComponent(handle)}&nocors=false`, {
-    headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'flashapi1.p.rapidapi.com' }
-  }).then(r => r.json()).then(json => {
+  fetch(`/rapidapi-ig-posts?handle=${encodeURIComponent(handle)}&key=${encodeURIComponent(apiKey)}`)
+  .then(r => r.json()).then(json => {
     if (json.message) throw new Error(json.message);
     const items = json?.items || json?.data?.items || [];
     if (!items.length) throw new Error('no posts returned — endpoint may differ: ' + JSON.stringify(json).slice(0,120));
