@@ -963,12 +963,12 @@ window.addEventListener('message', (e) => {
   window.postMessage({ __leadscout_ext_ping: true }, '*');
   setTimeout(pingExt, 500);
 })();
-function extFetch(type, handle, name, city, url) {
+function extFetch(type, handle, name, city, url, bizType) {
   return new Promise((resolve) => {
     if (!extReady) { resolve({ error: 'extension not connected' }); return; }
     const id = ++extCallId;
     extCallbacks[id] = resolve;
-    window.postMessage({ __leadscout_ext: true, type, handle, name, city, url, id }, '*');
+    window.postMessage({ __leadscout_ext: true, type, handle, name, city, url, bizType: bizType || currentBizType, id }, '*');
     setTimeout(() => {
       if (extCallbacks[id]) { delete extCallbacks[id]; resolve({ error: 'timeout' }); }
     }, 20000);
