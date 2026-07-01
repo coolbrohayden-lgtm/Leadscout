@@ -1,6 +1,6 @@
 // Background service worker — makes authenticated fetches to Instagram/TikTok
 // from the browser context so the user's session cookies are sent automatically
-// SW version: 21 (IG rate-limit delay + retry on 429)
+// SW version: 23 (IG posts fetch)
 
 // Keep the service worker alive during long operations (MV3 gets killed after ~30s idle)
 let keepAlivePort = null;
@@ -78,12 +78,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'set_rapidapi_key') {
+    chrome.storage.local.set({ rapidapi_key: msg.key });
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (msg.type === 'version') {
-    sendResponse({ version: 21, endpoint: 'tiktok-search+bio+category+ratelimit' });
+    sendResponse({ version: 22, endpoint: 'tiktok-search+bio+category+ratelimit+rapidapi-fallback' });
     return true;
   }
   if (msg.type === 'fetchig') {
     fetchInstagram(msg.handle).then(sendResponse).catch(e => sendResponse({ error: e.message }));
+    return true;
+  }
+  if (msg.type === 'fetchig_posts') {
+    fetchInstagramPosts(msg.handle).then(sendResponse).catch(e => sendResponse({ error: e.message }));
     return true;
   }
   if (msg.type === 'fetchtt') {
@@ -118,13 +128,40 @@ async function fetchInstagram(handle) {
 
   const result = await _doFetchIg(handle);
 
-  // On 429, wait 20 seconds and retry once
+  // On 429, try RapidAPI fallback before waiting and retrying
   if (result?.error === 'HTTP 429') {
+    const rapid = await _doFetchIgRapidApi(handle);
+    if (rapid && !rapid.error) return rapid;
+    // RapidAPI also failed — wait 20s and retry direct
     await new Promise(r => setTimeout(r, 20000));
     _igLastCall = Date.now();
     return _doFetchIg(handle);
   }
   return result;
+}
+
+async function _doFetchIgRapidApi(handle) {
+  const { rapidapi_key } = await chrome.storage.local.get('rapidapi_key');
+  if (!rapidapi_key) return { error: 'no rapidapi key' };
+  try {
+    const r = await fetch(
+      `https://flashapi1.p.rapidapi.com/ig/info_username?user=${encodeURIComponent(handle)}&nocors=false`,
+      { headers: { 'x-rapidapi-key': rapidapi_key, 'x-rapidapi-host': 'flashapi1.p.rapidapi.com' } }
+    );
+    if (!r.ok) return { error: `FlashAPI HTTP ${r.status}` };
+    const json = await r.json();
+    if (json.message) return { error: json.message };
+    const user = json?.user || json;
+    const followers = user?.follower_count ?? null;
+    if (followers === null) return { error: 'no follower data', raw: JSON.stringify(json).slice(0, 200) };
+    return {
+      followers,
+      posts: user?.media_count ?? null,
+      biography: user?.biography || '',
+      category: user?.category_name || user?.category || '',
+      source: 'flashapi',
+    };
+  } catch(e) { return { error: e.message }; }
 }
 
 async function _doFetchIg(handle) {
@@ -149,6 +186,29 @@ async function _doFetchIg(handle) {
       biography: user.biography || '',
       category: user.category_name || user.category || '',
     };
+  } catch(e) { return { error: e.message }; }
+}
+
+async function fetchInstagramPosts(handle) {
+  const { rapidapi_key } = await chrome.storage.local.get('rapidapi_key');
+  if (!rapidapi_key) return { error: 'no rapidapi key' };
+  try {
+    const r = await fetch(
+      `https://flashapi1.p.rapidapi.com/ig/posts_username?user=${encodeURIComponent(handle)}&nocors=false`,
+      { headers: { 'x-rapidapi-key': rapidapi_key, 'x-rapidapi-host': 'flashapi1.p.rapidapi.com' } }
+    );
+    if (!r.ok) return { error: `FlashAPI HTTP ${r.status}` };
+    const json = await r.json();
+    if (json.message) return { error: json.message };
+    const items = json?.items || json?.data?.items || [];
+    if (!items.length) return { error: 'no posts', raw: JSON.stringify(json).slice(0,200) };
+    const posts = items.slice(0, 8).map(p => ({
+      taken_at: p.taken_at,
+      like_count: p.like_count ?? null,
+      play_count: p.play_count ?? p.view_count ?? null,
+      media_type: p.media_type, // 1=photo, 2=video, 8=carousel
+    }));
+    return { posts };
   } catch(e) { return { error: e.message }; }
 }
 

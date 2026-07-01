@@ -82,6 +82,20 @@ tr:hover td{background:var(--surface2);}
 /* Empty */
 .empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px;line-height:1.8;}
 
+/* Posts popup */
+.posts-popup{position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:220px;max-width:280px;box-shadow:0 8px 32px rgba(0,0,0,.5);font-size:11px;}
+.posts-popup h4{font-size:11px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.posts-popup h4 span{color:var(--muted);font-weight:400;}
+.posts-popup .prow{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);}
+.posts-popup .prow:last-child{border-bottom:none;}
+.posts-popup .pdate{color:var(--muted);min-width:40px;}
+.posts-popup .pstats{display:flex;gap:8px;color:var(--text);}
+.posts-popup .pstat{display:flex;align-items:center;gap:2px;}
+.posts-popup .close-x{cursor:pointer;color:var(--muted);font-size:14px;line-height:1;}
+.posts-popup .close-x:hover{color:var(--text);}
+.posts-btn{background:none;border:none;cursor:pointer;font-size:10px;color:var(--muted);padding:0 2px;line-height:1;vertical-align:middle;}
+.posts-btn:hover{color:var(--text);}
+
 /* Blacklist section toggle */
 .section-toggle{font-size:11px;color:var(--muted);cursor:pointer;padding:8px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;}
 .section-toggle:hover{color:var(--text);}
@@ -105,6 +119,7 @@ tr:hover td{background:var(--surface2);}
   </header>
   <div id="settingsPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);gap:16px;flex-wrap:wrap;align-items:center">
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Apollo.io API Key (for owner lookup)<input id="apolloKeyInput" type="password" placeholder="Apollo API key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
+    <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">RapidAPI Key (IG fallback)<input id="rapidApiKeyInput" type="password" placeholder="RapidAPI key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
   </div>
 
 <div class="stats-bar" id="statsBar"></div>
@@ -168,6 +183,8 @@ tr:hover td{background:var(--surface2);}
   ▶ Show blacklisted places (<span id="blCount">0</span>)
 </div>
 <div id="blacklistSection" style="display:none;padding:0 20px 20px;"></div>
+
+<div id="postsPopup" class="posts-popup" style="display:none"></div>
 
 <script>
 let allLeads = [];
@@ -312,7 +329,8 @@ function render(){
     <tbody>
     ${leads.map(l=>{
       const status=l.status||'new';
-      const ig=l.instagram?`<a class="pill pill-ig" href="https://instagram.com/${l.instagram}" target="_blank">${igSvg()} @${l.instagram}</a>`
+      const igPostsBtn=l.instagram?`<button class="posts-btn" title="View recent posts" onclick="showIgPosts(event,'${l.instagram}')">📅</button>`:'';
+      const ig=l.instagram?`<a class="pill pill-ig" href="https://instagram.com/${l.instagram}" target="_blank">${igSvg()} @${l.instagram}</a>${igPostsBtn}`
         :l.ig_signal?`<span class="pill pill-ig pill-dim">${igSvg()} IG?</span>`:'';
       const tt=l.tiktok?`<a class="pill pill-tt" href="https://tiktok.com/@${l.tiktok}" target="_blank">${ttSvg()} @${l.tiktok}</a>`
         :l.tt_signal?`<span class="pill pill-tt pill-dim">${ttSvg()} TT?</span>`:'';
@@ -506,6 +524,11 @@ function toggleSettings(){
   document.getElementById('settingsBtn').style.background=open?'':'var(--accent)';
   document.getElementById('settingsBtn').style.color=open?'':'#fff';
 }
+document.getElementById('rapidApiKeyInput').addEventListener('input', function(){
+  const key = this.value.trim();
+  localStorage.setItem('leadscout_rapidapi_key', key);
+  window.postMessage({ __leadscout_ext: true, type: 'set_rapidapi_key', key }, '*');
+});
 document.getElementById('apolloKeyInput').addEventListener('input', function(){
   localStorage.setItem('leadscout_apollo_key', this.value.trim());
 });
@@ -589,6 +612,81 @@ async function enrichLead(placeId){
   window.open('https://search.sunbiz.org/Inquiry/CorporationSearch/ByAddress#' + sbHash, '_blank');
 }
 
+// ── IG Posts popup ──
+function relDate(ts) {
+  const sec = Math.floor(Date.now()/1000) - ts;
+  if (sec < 3600) return Math.floor(sec/60)+'m ago';
+  if (sec < 86400) return Math.floor(sec/3600)+'h ago';
+  if (sec < 604800) return Math.floor(sec/86400)+'d ago';
+  if (sec < 2592000) return Math.floor(sec/604800)+'w ago';
+  return Math.floor(sec/2592000)+'mo ago';
+}
+function fmtNum(n) {
+  if (n == null) return '';
+  if (n >= 1000000) return (n/1000000).toFixed(1).replace(/\.0$/,'')+'M';
+  if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'')+'k';
+  return String(n);
+}
+function mediaIcon(type) {
+  if (type === 2) return '🎬';
+  if (type === 8) return '🖼';
+  return '📸';
+}
+
+const _postsCache = {};
+
+function showIgPosts(event, handle) {
+  event.stopPropagation();
+  const popup = document.getElementById('postsPopup');
+  const btn = event.currentTarget;
+  const rect = btn.getBoundingClientRect();
+
+  popup.style.display = 'block';
+  popup.innerHTML = `<h4>${igSvg()} @${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--muted);padding:8px 0">Loading…</div>`;
+
+  // Position below the button
+  popup.style.left = Math.min(rect.left, window.innerWidth - 300) + 'px';
+  popup.style.top = (rect.bottom + 6 + window.scrollY) + 'px';
+
+  if (_postsCache[handle]) { renderPostsPopup(handle, _postsCache[handle]); return; }
+
+  if (typeof chrome === 'undefined' || !chrome.runtime) {
+    popup.innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--muted)">Extension not connected.</div>`;
+    return;
+  }
+  chrome.runtime.sendMessage({ type: 'fetchig_posts', handle }, result => {
+    if (chrome.runtime.lastError || !result) {
+      renderPostsPopup(handle, null);
+      return;
+    }
+    if (result.error) {
+      document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot)">Error: ${result.error}</div>`;
+      return;
+    }
+    _postsCache[handle] = result.posts;
+    renderPostsPopup(handle, result.posts);
+  });
+}
+
+function renderPostsPopup(handle, posts) {
+  const popup = document.getElementById('postsPopup');
+  if (!posts || !posts.length) { popup.innerHTML += '<div style="color:var(--muted)">No posts found.</div>'; return; }
+  const rows = posts.map(p => {
+    const likes = p.like_count != null ? `❤️ ${fmtNum(p.like_count)}` : '';
+    const views = p.play_count != null ? `👁 ${fmtNum(p.play_count)}` : '';
+    return `<div class="prow">${mediaIcon(p.media_type)}<span class="pdate">${relDate(p.taken_at)}</span><span class="pstats">${[likes,views].filter(Boolean).join(' · ')}</span></div>`;
+  }).join('');
+  popup.innerHTML = `<h4>${igSvg()} @${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4>${rows}`;
+}
+
+function closePostsPopup() {
+  document.getElementById('postsPopup').style.display = 'none';
+}
+document.addEventListener('click', e => {
+  const popup = document.getElementById('postsPopup');
+  if (popup.style.display !== 'none' && !popup.contains(e.target)) closePostsPopup();
+});
+
 // ── Init ──
 (async () => {
   const user = await requireAuth();
@@ -599,6 +697,11 @@ async function enrichLead(placeId){
   // Load Apollo key from localStorage
   const savedApollo = localStorage.getItem('leadscout_apollo_key');
   if(savedApollo) document.getElementById('apolloKeyInput').value = savedApollo;
+  const savedRapid = localStorage.getItem('leadscout_rapidapi_key');
+  if(savedRapid) {
+    document.getElementById('rapidApiKeyInput').value = savedRapid;
+    window.postMessage({ __leadscout_ext: true, type: 'set_rapidapi_key', key: savedRapid }, '*');
+  }
   await load();
 })();
 </script>
