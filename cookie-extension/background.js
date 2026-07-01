@@ -113,7 +113,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'searchig') {
-    searchInstagram(msg.name, msg.city).then(sendResponse).catch(e => sendResponse({ error: e.message }));
+    searchInstagram(msg.name, msg.city, msg.bizType).then(sendResponse).catch(e => sendResponse({ error: e.message }));
     return true;
   }
   if (msg.type === 'searchtt') {
@@ -372,8 +372,33 @@ async function scanPageForSocials(url) {
   }
 }
 
+const BIZ_KEYWORDS = {
+  restaurant: /restaurant|cafe|cafeteria|bistro|kitchen|pizza|bakery|grill|taqueria|sushi|diner|eatery|food|burger|taco|ramen|deli|steakhouse|seafood|bbq|barbecue|tapas|cantina|trattoria|gastropub|patisserie|churros|falafel|gyro|pho|hibachi|teriyaki|noodle|dumpling|shawarma|kebab|curry|thai|mexican|italian|chinese|japanese|korean|indian|mediterranean|cuban|peruvian|colombian|venezuelan|salvadoran|jamaican|ethiopian/i,
+  spa: /spa|med spa|medspa|medical spa|laser|botox|filler|aesthetic|aesthetics|skincare|skin care|facial|hydrafacial|microneedling|coolsculpting|body contouring|waxing|esthetician|beauty|wellness|rejuvenation|anti.?aging|anti.?ageing/i,
+  hair_salon: /hair|salon|barber|haircut|hairstyle|highlights|balayage|color|colour|blowout|extensions|keratin|stylist|coiffure/i,
+  nail_salon: /nail|nails|manicure|pedicure|acrylic|gel nails|nail art|nail tech/i,
+  gym: /gym|fitness|workout|crossfit|training|personal trainer|bodybuilding|weightlifting|cardio|hiit|bootcamp|pilates|strength|conditioning/i,
+  yoga_studio: /yoga|pilates|meditation|mindfulness|wellness|vinyasa|flow|hot yoga|power yoga|barre/i,
+  dentist: /dental|dentist|teeth|smile|orthodontics|braces|invisalign|whitening|implant|oral/i,
+  cafe: /cafe|coffee|espresso|latte|cappuccino|barista|roast|brew|tea|matcha|boba/i,
+  bar: /bar|cocktail|drinks|nightclub|lounge|pub|brewery|craft beer|mixology|speakeasy/i,
+  barber_shop: /barber|barbershop|haircut|fade|lineup|shave|grooming|trim/i,
+};
+
+function getBizKeywords(bizType) {
+  if (!bizType) return BIZ_KEYWORDS.restaurant;
+  const key = bizType.toLowerCase().replace(/\s+/g, '_');
+  if (BIZ_KEYWORDS[key]) return BIZ_KEYWORDS[key];
+  // Partial match — e.g. "med spa" → spa
+  for (const [k, regex] of Object.entries(BIZ_KEYWORDS)) {
+    if (key.includes(k) || k.includes(key)) return regex;
+  }
+  // Custom keyword — build a simple regex from the type itself
+  return new RegExp(bizType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+}
+
 // Search Instagram by restaurant name, return best matching handle
-async function searchInstagram(name, city) {
+async function searchInstagram(name, city, bizType) {
   const query = encodeURIComponent(name);
   // Try multiple known search endpoints
   const endpoints = [
@@ -406,7 +431,7 @@ async function searchInstagram(name, city) {
   const cityLower = (city || '').toLowerCase();
   let best = null, bestScore = 0;
 
-  const FOOD_KEYWORDS = /restaurant|cafe|cafeteria|bistro|kitchen|pizza|bakery|grill|taqueria|sushi|diner|eatery|food|burger|taco|ramen|deli|steakhouse|seafood|bbq|barbecue|bar\s*&\s*grill|tapas|cantina|trattoria|osteria|brasserie|gastropub|patisserie|creperie|boulangerie|gelateria|churros|empanada|falafel|gyro|pho|dim\s*sum|hibachi|teriyaki|wok|noodle|dumpling|shawarma|kebab|curry|thai|mexican|italian|chinese|japanese|korean|indian|mediterranean|cuban|peruvian|colombian|venezuelan|salvadoran|jamaican|ethiopian/i;
+  const BIZ_RE = getBizKeywords(bizType);
 
   for (const u of users) {
     const fullName = (u.full_name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '');
@@ -423,9 +448,9 @@ async function searchInstagram(name, city) {
     if (u.is_verified) score += 5;
     if (matchedWords.length === 0) score -= 20;
 
-    // Boost if Instagram category or bio indicates it's a food/restaurant business
-    if (FOOD_KEYWORDS.test(category)) score += 25;
-    else if (FOOD_KEYWORDS.test(bio)) score += 10;
+    // Boost if Instagram category or bio matches the business type being scanned
+    if (BIZ_RE.test(category)) score += 25;
+    else if (BIZ_RE.test(bio)) score += 10;
 
     if (score > bestScore) { bestScore = score; best = u; }
   }
