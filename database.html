@@ -648,6 +648,18 @@ function showIgPosts(event, handle) {
   popup.style.left = Math.min(rect.left, window.innerWidth - 300) + 'px';
   popup.style.top = (rect.bottom + 6) + 'px';
 
+  // Check if we already have stored engagement data for this lead
+  const storedLead = allLeads.find(l => l.instagram === handle);
+  if (storedLead?.ig_engagement) {
+    try {
+      const data = typeof storedLead.ig_engagement === 'string'
+        ? JSON.parse(storedLead.ig_engagement) : storedLead.ig_engagement;
+      _postsCache[handle] = { posts: data.posts_details, engagementRate: data.engagement_rate, recentExplanation: data.recent_posts_explanation };
+      renderPostsPopup(handle, _postsCache[handle]);
+      return;
+    } catch(e) {}
+  }
+
   if (_postsCache[handle]) { renderPostsPopup(handle, _postsCache[handle]); return; }
 
   const apiKey = window._rapidApiKey || localStorage.getItem('leadscout_rapidapi_key');

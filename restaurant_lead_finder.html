@@ -1242,6 +1242,7 @@ async function startScan(debugMode=false){
       const ig = socials.instagram;
       const address = details.formatted_address || place.vicinity || place.address || '';
       const igStats = ig ? await scrapeIgStats(ig) : {followers:null,posts:null,bio:''};
+      const igEngagement = ig && rapidKey ? await fetchIgEngagement(ig, rapidKey) : null;
       const ttStats = socials.tiktok ? await scrapeTikTokStats(socials.tiktok) : {followers:null,totalLikes:null,bio:''};
 
       const igBioCheck = checkBioLocation(igStats.bio, city, address);
@@ -1264,6 +1265,7 @@ async function startScan(debugMode=false){
         lng: place.geometry?.location?.lng ?? place.lng,
         instagram: ig||'', ig_followers: igStats?.followers??'', ig_posts: igStats?.posts??'',
         ig_bio: igStats.bio||'', ig_bio_location: igBioCheck.found.join(', '), ig_category: igStats.category||'',
+        ig_engagement: igEngagement ? JSON.stringify(igEngagement) : null,
         tiktok: socials.tiktok||'', tt_followers: ttStats?.followers??'', tt_total_likes: ttStats?.totalLikes??'',
         tt_bio: ttStats.bio||'', tt_bio_location: ttBioCheck.found.join(', '),
         facebook: socials.facebook||'',
@@ -1531,6 +1533,22 @@ function parseSocialNum(str){
   if(/[Kk]$/i.test(s)) return Math.round(parseFloat(s)*1000);
   const n=parseInt(s);
   return isNaN(n)?null:n;
+}
+
+async function fetchIgEngagement(handle, key) {
+  try {
+    const r = await fetch(`/rapidapi-ig-posts?handle=${encodeURIComponent(handle)}&key=${encodeURIComponent(key)}`);
+    const json = await r.json();
+    if (json.message || json.error || !json.posts_details?.length) return null;
+    return {
+      engagement_rate: json.engagement_rate_percentages ?? null,
+      recent_posts_explanation: json.recent_posts_explanation || '',
+      posts_details: (json.posts_details || []).map(p => ({
+        likes: p.likes, comments: p.comments,
+        taken_at: p.taken_at, time_ago: p.time_ago,
+      })),
+    };
+  } catch(e) { return null; }
 }
 
 async function scrapeIgStats(handle){
