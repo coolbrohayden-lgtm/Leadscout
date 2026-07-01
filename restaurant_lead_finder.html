@@ -810,6 +810,7 @@ select { background: var(--surface2); border: 1px solid var(--border); border-ra
       <button class="fchip fc-hot"  onclick="setFilter('HOT')">🔥 HOT</button>
       <button class="fchip fc-warm" onclick="setFilter('WARM')">WARM</button>
       <button class="fchip fc-cold" onclick="setFilter('COLD')">COLD</button>
+      <button id="scanToggleBtn" class="btn" style="display:none;font-size:9px;padding:2px 8px;margin-left:auto" onclick="showCurrentScanOnly=!showCurrentScanOnly;renderLeads()">This Scan</button>
     </div>
     <div id="leadsWrap" class="leads">
       <div class="empty">Map loads instantly — no API key needed.<br><br>Paste your Google Maps API key above before scanning.</div>
@@ -842,6 +843,8 @@ let map, gridLayers=[], selectedBounds={}, allLeads=[], gmarkers=[], scanning=fa
 let extReady = false;
 let igFetchMode = 'rapidapi'; // 'ext' or 'rapidapi' — set at scan start by session check
 let activeFilter = 'all';
+let currentScanIds = new Set(); // place_ids found in the most recent scan
+let showCurrentScanOnly = false;
 
 // ── IndexedDB ──
 // ── Supabase helpers ──
@@ -1105,6 +1108,8 @@ async function startScan(debugMode=false){
   if(chunks.length===0 || scanning) return;
 
   scanning=true;
+  currentScanIds = new Set();
+  showCurrentScanOnly = true;
   document.getElementById('scanBtn').disabled=true;
   document.getElementById('debugBtn').disabled=true;
   if(debugMode){
@@ -1281,6 +1286,7 @@ async function startScan(debugMode=false){
         scanned_at: Date.now(),
       };
 
+      currentScanIds.add(lead.place_id);
       if(!existingLead){
         allLeads.push(lead); addMarker(lead);
       } else {
@@ -1796,7 +1802,19 @@ function addMarker(lead){
 // ── Render leads ──
 function renderLeads(){
   const w=document.getElementById('leadsWrap');
+  const scanToggleBtn = document.getElementById('scanToggleBtn');
+  if(scanToggleBtn){
+    if(currentScanIds.size > 0){
+      scanToggleBtn.style.display='inline-block';
+      scanToggleBtn.textContent = showCurrentScanOnly ? `This Scan (${currentScanIds.size})` : `All Leads`;
+      scanToggleBtn.style.background = showCurrentScanOnly ? 'var(--accent)' : 'var(--surface2)';
+      scanToggleBtn.style.color = showCurrentScanOnly ? '#fff' : 'var(--muted)';
+    } else {
+      scanToggleBtn.style.display='none';
+    }
+  }
   const filtered = allLeads.filter(l=>{
+    if(showCurrentScanOnly && !currentScanIds.has(l.place_id)) return false;
     if(activeFilter==='all') return true;
     if(activeFilter==='HOT'||activeFilter==='WARM'||activeFilter==='COLD') return l.label===activeFilter;
     return l.status===activeFilter;
