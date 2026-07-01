@@ -658,13 +658,14 @@ function showIgPosts(event, handle) {
 
   fetch(`/rapidapi-ig-posts?handle=${encodeURIComponent(handle)}&key=${encodeURIComponent(apiKey)}`)
   .then(r => r.json()).then(json => {
-    if (json.error) throw new Error(json.error + (json.detail ? ': ' + JSON.stringify(json.detail).slice(0,120) : ''));
-    const posts = json?.posts_details || [];
-    if (!posts.length) throw new Error('No post data returned');
+    console.log('[ig-posts] raw response:', JSON.stringify(json).slice(0, 500));
+    if (json.error) throw new Error(json.error + (json.detail ? ': ' + JSON.stringify(json.detail).slice(0,200) : ''));
+    const posts = json?.posts_details || json?.data?.posts_details || [];
+    if (!posts.length) throw new Error('Keys: ' + Object.keys(json).join(', ') + ' | ' + JSON.stringify(json).slice(0,200));
     _postsCache[handle] = { posts, engagementRate: json.engagement_rate_percentages, recentExplanation: json.recent_posts_explanation };
     renderPostsPopup(handle, _postsCache[handle]);
   }).catch(err => {
-    document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot);font-size:10px">${err.message}</div>`;
+    document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot);font-size:10px;word-break:break-all">${err.message}</div>`;
   });
 }
 
