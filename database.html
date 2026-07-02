@@ -166,6 +166,7 @@ tr:hover td{background:var(--surface2);}
     <button class="btn" onclick="exportCSV()">Export CSV</button>
     <button class="btn" onclick="toggleSettings()" id="settingsBtn" style="display:none"></button>
     <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">👤 Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
+    <button class="btn" onclick="toggleActivityPanel()">🕘 Activity</button>
     <button class="btn btn-danger" onclick="clearDenied()">Clear Denied</button>
     <button class="btn btn-danger" onclick="clearAll()">🗑 Clear All</button>
   </div>
@@ -175,10 +176,17 @@ tr:hover td{background:var(--surface2);}
   <div id="settingsPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);gap:16px;flex-wrap:wrap;align-items:center">
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Apollo.io API Key (for owner lookup)<input id="apolloKeyInput" type="password" placeholder="Apollo API key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">RapidAPI Key (IG fallback)<input id="rapidApiKeyInput" type="password" placeholder="RapidAPI key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
+    <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Resend API Key (auto-email)<input id="resendKeyInput" type="password" placeholder="re_..." style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
+    <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Email From Address<input id="resendFromInput" placeholder="You <you@yourdomain.com>" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
+    <button class="btn btn-p" style="align-self:flex-end" onclick="saveEmailSettings()">Save Email Settings</button>
   </div>
   <div id="pendingPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-direction:column;gap:8px">
     <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Accounts awaiting approval</div>
     <div id="pendingList" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+  <div id="activityPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-direction:column;gap:6px;max-height:260px;overflow-y:auto">
+    <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Recent team activity</div>
+    <div id="activityList" style="display:flex;flex-direction:column;gap:4px"></div>
   </div>
 
 <div class="stats-bar" id="statsBar"></div>
@@ -203,6 +211,7 @@ tr:hover td{background:var(--surface2);}
     <button class="fchip"             data-f="contacted" onclick="setFilter('contacted')">📞 Contacted</button>
     <button class="fchip"             data-f="interested" onclick="setFilter('interested')">👀 Interested</button>
     <button class="fchip fc-denied"   data-f="denied"    onclick="setFilter('denied')">🚫 Denied</button>
+    <button class="fchip"             data-f="mine"      onclick="setFilter('mine')">🙋 Mine</button>
   </div>
   <div class="filter-chips" style="margin-bottom:4px" id="bizTypeFilterRow">
     <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">TYPE</span>
@@ -398,6 +407,7 @@ function getFiltered(){
     else if(activeFilter==='no_social'){ if(l.instagram||l.tiktok||l.facebook) return false; }
     else if(activeFilter==='no_website'){ if(l.website) return false; }
     else if(activeFilter==='has_phone'){ if(!l.phone) return false; }
+    else if(activeFilter==='mine'){ if(l.assigned_to!==_myName) return false; }
     else { if(l.status!==activeFilter) return false; }
     if(minScore && (l.score||0)<minScore) return false;
     if(locFilter && !(l.address||'').toLowerCase().includes(locFilter)) return false;
@@ -493,6 +503,7 @@ function render(){
           <div style="font-weight:600">${l.name}${wasExported?' <span title="Already exported" style="color:#4ade80;font-size:11px">✓</span>':''}</div>
           <span class="badge badge-${(l.label||'cold').toLowerCase()}">${l.label||'?'}</span>
           <span style="font-size:9px;color:var(--muted);margin-left:4px">${bizIcon} ${bizLabel}</span>
+          ${l.assigned_to?`<div style="font-size:9px;color:var(--accent);margin-top:2px">🙋 ${l.assigned_to}</div>`:''}
           ${scanDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${scanDate}</div>`:''}
         </td>
         <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
@@ -516,6 +527,7 @@ function render(){
         <td><input class="notes-input" value="${(l.notes||'').replace(/"/g,'&quot;')}" placeholder="Add notes…" onblur="saveNotes('${l.place_id}',this.value)"/></td>
         <td style="white-space:nowrap">
           <button class="btn" style="font-size:10px;padding:2px 8px" onclick="showSalesScript('${l.place_id}')">📝 Script</button>
+          <button class="btn" style="font-size:10px;padding:2px 8px;margin-top:3px" onclick="claimLead('${l.place_id}')">${l.assigned_to===_myName?'✋ Release':'🙋 Claim'}</button>
           <button class="btn" style="font-size:10px;padding:2px 8px;margin-top:3px" onclick="deleteLead('${l.place_id}')">Delete</button>
         </td>
       </tr>`;
@@ -649,14 +661,43 @@ function getLeadScript(lead){
   return buildScript({ tier:(lead.label||'cold').toLowerCase(), size, bizType:lead.business_type||'restaurant', name:lead.name||'this business', handle:lead.instagram?`@${lead.instagram}`:'', followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead });
 }
 
+async function sendAutoEmail(lead){
+  const email = lead.business_email || lead.owner_email;
+  if(!email){ showToast(`⚠️ ${lead.name} has no email on file`); return; }
+  const subject = `Quick idea for ${lead.name}`;
+  const text = getLeadScript(lead);
+  if(window._resendEnabled){
+    showToast(`📤 Sending email to ${email}…`);
+    try{
+      const r = await fetch('/send-email', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ to: email, subject, text })
+      });
+      const json = await r.json();
+      if(json.ok){
+        showToast(`✅ Email sent to ${email}`);
+        // Stamp it in notes so the whole team sees it
+        const stamp = `[📧 auto-emailed ${new Date().toLocaleDateString()}]`;
+        if(!(lead.notes||'').includes('auto-emailed')){
+          lead.notes = ((lead.notes||'') + ' ' + stamp).trim();
+          await supabaseClient.from('leads').update({notes: lead.notes}).eq('place_id', lead.place_id);
+          render();
+        }
+      } else {
+        showToast(`❌ Email failed: ${json.error||'unknown error'}`);
+      }
+    }catch(e){ showToast(`❌ Email failed: ${e.message}`); }
+  } else {
+    // No Resend key configured — fall back to opening the user's mail client
+    window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`);
+    showToast(`📧 Email drafted to ${email} (add a Resend key in Settings for auto-send)`);
+  }
+}
+
 function runStageAction(stage, lead){
   if(stage.action==='email'){
-    const email = lead.business_email || lead.owner_email;
-    if(!email){ showToast(`⚠️ ${lead.name} has no email on file`); return; }
-    const subject = encodeURIComponent(`Quick idea for ${lead.name}`);
-    const body = encodeURIComponent(getLeadScript(lead));
-    window.open(`mailto:${email}?subject=${subject}&body=${body}`);
-    showToast(`📧 Email drafted to ${email}`);
+    sendAutoEmail(lead);
   } else if(stage.action==='igdm'){
     if(!lead.instagram){ showToast(`⚠️ ${lead.name} has no Instagram handle`); return; }
     navigator.clipboard.writeText(getLeadScript(lead)).catch(()=>{});
@@ -678,10 +719,11 @@ function pipeCard(l){
   const notes=l.notes?`<span style="font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;display:inline-block" title="${(l.notes||'').replace(/"/g,'&quot;')}">💬 ${l.notes}</span>`:'';
   return `<div class="pipe-card" draggable="true" ondragstart="pipeDragStart(event,'${l.place_id}')" ondragend="pipeDragEnd(event)">
     <div class="nm">${icon} ${l.name} ${l.exported_at?'<span style="color:#4ade80;font-size:10px" title="Already exported">✓</span>':''}</div>
-    <div class="meta">${label} <span style="font-weight:700;color:var(--accent)">⭐ ${l.score||0}</span>${l.phone?` · ${l.phone}`:''}</div>
+    <div class="meta">${label} <span style="font-weight:700;color:var(--accent)">⭐ ${l.score||0}</span>${l.phone?` · ${l.phone}`:''}${l.assigned_to?` · <span style="color:var(--accent)">🙋 ${l.assigned_to}</span>`:''}</div>
     <div class="socials">${ig}${tt}</div>
     <div class="foot">
       <button class="btn" style="font-size:9px;padding:2px 7px" onclick="showSalesScript('${l.place_id}')">📝 Script</button>
+      <button class="btn" style="font-size:9px;padding:2px 7px" onclick="claimLead('${l.place_id}')">${l.assigned_to===_myName?'✋':'🙋'}</button>
       ${notes}
     </div>
   </div>`;
@@ -1844,6 +1886,73 @@ function toggleAutoRefresh() {
   _autoRefreshTimer ? stopAutoRefresh() : startAutoRefresh();
 }
 
+// ── Lead claiming (assign a lead to yourself so the team doesn't double-work it) ──
+let _myName = '';
+
+async function claimLead(placeId){
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  if(!lead) return;
+  const newVal = lead.assigned_to === _myName ? null : _myName; // toggle
+  lead.assigned_to = newVal;
+  const {error} = await supabaseClient.from('leads').update({assigned_to:newVal}).eq('place_id', placeId);
+  if(error){ console.error('claimLead', error); showToast('❌ Claim failed — is the assigned_to column added in Supabase?'); return; }
+  showToast(newVal ? `🙋 You claimed ${lead.name}` : `Released ${lead.name}`);
+  render();
+}
+
+// ── Team activity feed (built from updated_at/updated_by on leads) ──
+let _profileNames = {}; // user id -> name
+
+async function loadProfileNames(){
+  const {data} = await supabaseClient.from('user_profiles').select('id,name');
+  (data||[]).forEach(p => _profileNames[p.id] = p.name || 'Someone');
+}
+
+function timeAgo(iso){
+  if(!iso) return '';
+  const s = (Date.now() - new Date(iso).getTime())/1000;
+  if(s<60) return 'just now';
+  if(s<3600) return `${Math.floor(s/60)}m ago`;
+  if(s<86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+
+function toggleActivityPanel(){
+  const p = document.getElementById('activityPanel');
+  const open = p.style.display === 'flex';
+  p.style.display = open ? 'none' : 'flex';
+  if(!open) renderActivity();
+}
+
+function renderActivity(){
+  const list = document.getElementById('activityList');
+  const STATUS_LABELS = {new:'🆕 New',contacted:'📞 Contacted',interested:'👀 Interested',signed:'✅ Signed',denied:'🚫 Denied'};
+  const recent = allLeads
+    .filter(l=>l.updated_at && l.updated_by)
+    .sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at))
+    .slice(0,25);
+  if(!recent.length){ list.innerHTML = '<div style="font-size:11px;color:var(--muted)">No activity yet — status changes will show up here.</div>'; return; }
+  list.innerHTML = recent.map(l=>{
+    const who = _profileNames[l.updated_by] || 'Someone';
+    const stage = STATUS_LABELS[l.status] || (customStages.find(s=>s.id===l.status)?`${customStages.find(s=>s.id===l.status).icon||'📁'} ${customStages.find(s=>s.id===l.status).title}`:l.status);
+    return `<div style="font-size:11px;display:flex;gap:6px;align-items:baseline">
+      <span style="color:var(--muted);font-size:9px;min-width:52px">${timeAgo(l.updated_at)}</span>
+      <span><b>${who}</b> moved <b>${l.name}</b> to ${stage}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Email settings (admin) ──
+async function saveEmailSettings(){
+  if(!isAdmin()){ showToast('Only the admin can change email settings'); return; }
+  const key = document.getElementById('resendKeyInput').value.trim();
+  const from = document.getElementById('resendFromInput').value.trim();
+  const {error} = await supabaseClient.from('shared_settings').update({resend_key:key||null, resend_from:from||null}).eq('id',1);
+  if(error){ showToast('❌ Save failed — are resend_key/resend_from columns added in Supabase?'); console.error(error); return; }
+  window._resendEnabled = !!key;
+  showToast('✅ Email settings saved' + (key ? ' — auto-send is ON' : ' — auto-send is OFF'));
+}
+
 // ── Pending account approvals (admin only) ──
 async function loadPendingAccounts(){
   const { data, error } = await supabaseClient.from('user_profiles').select('id,name,approved').eq('approved', false);
@@ -1890,11 +1999,20 @@ function togglePendingPanel(){
   const user = await requireAuth();
   if(!user) return;
   const uname = await getUserName();
+  _myName = uname;
   const lbl = document.getElementById('userLabel');
   if(lbl) lbl.textContent = uname;
   if (isAdmin()) {
     document.getElementById('pendingBtn').style.display = '';
     loadPendingAccounts();
+  }
+  loadProfileNames();
+  // Email auto-send: on if a Resend key is saved in shared_settings
+  const { data: emailSettings } = await supabaseClient.from('shared_settings').select('resend_key,resend_from').eq('id',1).single();
+  window._resendEnabled = !!emailSettings?.resend_key;
+  if (isAdmin()) {
+    if(emailSettings?.resend_key) document.getElementById('resendKeyInput').value = emailSettings.resend_key;
+    if(emailSettings?.resend_from) document.getElementById('resendFromInput').value = emailSettings.resend_from;
   }
   // Load Apollo key from localStorage
   const savedApollo = localStorage.getItem('leadscout_apollo_key');
@@ -1909,7 +2027,7 @@ function togglePendingPanel(){
   if (sharedSettings?.rapid_key) window._rapidApiKey = sharedSettings.rapid_key;
   // Lock API key inputs to admin only
   if (!isAdmin()) {
-    ['rapidApiKeyInput','apolloKeyInput'].forEach(id => {
+    ['rapidApiKeyInput','apolloKeyInput','resendKeyInput','resendFromInput'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.value = '••••••••••••••••'; el.disabled = true; el.style.opacity = '0.4'; el.style.cursor = 'not-allowed'; }
     });

@@ -114,6 +114,29 @@ function httpsPost(apiUrl, body, apiKey) {
   });
 }
 
+// Read shared_settings row from Supabase (cached 60s) — used by /send-email
+let _settingsCache = { data: null, at: 0 };
+function getSharedSettings() {
+  return new Promise((resolve) => {
+    if (_settingsCache.data && Date.now() - _settingsCache.at < 60000) return resolve(_settingsCache.data);
+    const u = new URL(SUPA_URL + '/rest/v1/shared_settings?id=eq.1&select=*');
+    https.get({
+      hostname: u.hostname, path: u.pathname + u.search,
+      headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${SUPA_ANON_KEY}` }
+    }, (r) => {
+      let data = '';
+      r.on('data', c => data += c);
+      r.on('end', () => {
+        try {
+          const rows = JSON.parse(data);
+          _settingsCache = { data: rows[0] || {}, at: Date.now() };
+          resolve(_settingsCache.data);
+        } catch(e) { resolve(_settingsCache.data || {}); }
+      });
+    }).on('error', () => resolve(_settingsCache.data || {}));
+  });
+}
+
 function httpsGet(apiUrl) {
   return new Promise((resolve, reject) => {
     https.get(apiUrl, (res) => {
@@ -479,6 +502,54 @@ const server = http.createServer(async (req, res) => {
     } catch(e) {
       res.writeHead(500, CORS); res.end(JSON.stringify({ error: e.message }));
     }
+    return;
+  }
+
+  // Send an email through Resend (key + from address live in shared_settings)
+  if (parsed.pathname === '/send-email' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { to, subject, text } = JSON.parse(body);
+        if (!to || !subject || !text) {
+          res.writeHead(400, CORS); res.end(JSON.stringify({ error: 'Missing to/subject/text' })); return;
+        }
+        const settings = await getSharedSettings();
+        if (!settings.resend_key) {
+          res.writeHead(400, CORS); res.end(JSON.stringify({ error: 'No Resend API key configured. Admin: add it in Settings on the database page.' })); return;
+        }
+        const from = settings.resend_from || 'LeadScout <onboarding@resend.dev>';
+        const result = await new Promise((resolve, reject) => {
+          const payload = JSON.stringify({ from, to: [to], subject, text });
+          const rq = https.request({
+            hostname: 'api.resend.com', path: '/emails', method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${settings.resend_key}`,
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(payload)
+            }
+          }, (r) => {
+            let data = '';
+            r.on('data', c => data += c);
+            r.on('end', () => {
+              try { resolve({ status: r.statusCode, body: JSON.parse(data) }); }
+              catch(e) { resolve({ status: r.statusCode, body: { raw: data } }); }
+            });
+          });
+          rq.on('error', reject);
+          rq.setTimeout(15000, () => { rq.destroy(); reject(new Error('Resend timeout')); });
+          rq.write(payload); rq.end();
+        });
+        if (result.status >= 200 && result.status < 300) {
+          res.writeHead(200, CORS); res.end(JSON.stringify({ ok: true, id: result.body.id }));
+        } else {
+          res.writeHead(502, CORS); res.end(JSON.stringify({ error: result.body.message || `Resend error ${result.status}`, detail: result.body }));
+        }
+      } catch(e) {
+        res.writeHead(500, CORS); res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
