@@ -903,152 +903,464 @@ function getAllSegmentScripts({ tier, size, bizType, name, handle, followers, en
   const tt = lead.tt_followers || 0;
   const ttHandle = lead.tiktok ? `@${lead.tiktok}` : null;
   const hasWeb = !!(lead.website || lead.url);
-  const engLow = engRate != null && Number(engRate) < 2;
-  const engHigh = engRate != null && Number(engRate) >= 5;
+  const hasEmail = !!lead.business_email;
+  const engNum = engRate != null ? Number(engRate) : null;
+  const engLow = engNum != null && engNum < 2;
+  const engMed = engNum != null && engNum >= 2 && engNum < 5;
+  const engHigh = engNum != null && engNum >= 5;
+  const ppm = postsPerMonth || 0;
+  const infrequent = ppm > 0 && ppm < 3;
+  const dormant = !!lastPost && /month|week/i.test(lastPost) && (
+    /[2-9]\s*month/i.test(lastPost) || /[5-9]\s*week|[1-9][0-9]\s*week/i.test(lastPost)
+  );
+  const ttDominant = tt > ig * 3 && tt > 500;
+  const igDominant = ig > tt * 3 && ig > 500;
+  const bothStrong = ig >= 1000 && tt >= 1000;
+  const bothWeak = ig < 500 && tt < 500;
+  const igOnly = ig >= 200 && tt < 100;
+  const ttOnly = tt >= 200 && ig < 100;
+  const igMicro = ig > 0 && ig < 500;
+  const igGrowing = ig >= 500 && ig < 5000;
+  const igBig = ig >= 5000;
+  const ttMicro = tt > 0 && tt < 500;
+  const ttGrowing = tt >= 500 && tt < 5000;
+  const ttBig = tt >= 5000;
+  const ghostIg = !!lead.instagram && ig < 50;
 
   const isSpa = /spa|aesthetic|medspa|med.spa|laser|beauty|wellness/i.test(bizType);
   const isGym = /gym|fitness|yoga|pilates|crossfit/i.test(bizType);
   const isSalon = /salon|hair|barber|nail/i.test(bizType);
   const niche = isSpa ? 'spa' : isGym ? 'gym' : isSalon ? 'salon' : 'restaurant';
   const NICHE = {
-    spa:    { clients:'clients',   product:'treatments',       action:'book appointments',       biz:'med spa',    them:'people booking facials, injectables, and body treatments' },
-    gym:    { clients:'members',   product:'classes & training',action:'sign up',                biz:'gym',        them:'people looking for a gym or trainer near them' },
-    salon:  { clients:'clients',   product:'services',         action:'book appointments',       biz:'salon',      them:'people deciding where to get their hair or nails done' },
-    restaurant:{ clients:'customers',product:'food',           action:'walk in or make a reservation',biz:'restaurant',them:'people deciding where to eat tonight' },
+    spa:        { clients:'clients',   product:'treatments',            action:'book appointments',              biz:'med spa',     them:'people booking facials, injectables, and body treatments', competitors:'other med spas' },
+    gym:        { clients:'members',   product:'classes & training',    action:'sign up for a membership',       biz:'gym',         them:'people looking for a gym or trainer nearby',              competitors:'other gyms and studios' },
+    salon:      { clients:'clients',   product:'services',              action:'book an appointment',            biz:'salon',       them:'people deciding where to get their hair or nails done',    competitors:'other salons' },
+    restaurant: { clients:'customers', product:'food & experience',     action:'walk in or make a reservation',  biz:'restaurant',  them:'people deciding where to eat tonight',                     competitors:'other restaurants nearby' },
   };
   const N = NICHE[niche];
   const owner = lead.owner_name ? lead.owner_name.split(' ')[0] : null;
   const hey = owner ? `Hey ${owner}, ` : `Hey — `;
   const bname = name || 'your business';
-  const igLine = ig ? `${fmtNum(ig)} Instagram followers` : 'your Instagram';
-  const ttLine = tt ? `${fmtNum(tt)} TikTok followers` : 'your TikTok';
-
-  const engExplain = engRate != null
-    ? `out of every 100 people who follow you, about ${Math.round(Number(engRate))} are liking or commenting`
+  const igStr = ig ? fmtNum(ig) : null;
+  const ttStr = tt ? fmtNum(tt) : null;
+  const engExplain = engNum != null
+    ? `out of every 100 people who follow you, about ${Math.round(engNum)} are liking or commenting`
     : null;
 
   const segments = [];
 
-  // ── Segment 1: Strong IG, weak/no TikTok ──
-  if (ig > 200 || !tt) {
-    segments.push({
-      icon: '📸', label: 'IG Strong, No TikTok',
-      desc: 'They have Instagram presence but are missing TikTok',
-      script: `${hey}I came across ${handle || bname} on Instagram — ${ig ? `you've built up ${igLine}` : 'you have a solid Instagram presence'}, which tells me you know how to connect with people online.
-
-Here's what I noticed though: you're not on TikTok${tt ? ` — or at least not with any real presence` : ''}.
-
-Right now TikTok is sending local ${N.clients} to ${N.biz}s like yours every single day. ${N.them.charAt(0).toUpperCase() + N.them.slice(1)} are finding places on TikTok first, then checking Instagram to verify. If you're only on one platform, you're invisible to half your potential ${N.clients}.
-
-The good news? You already have content and a following — we repurpose what you're already creating for Instagram into TikTok-ready clips. No extra work on your end.
-
-${tt ? `Your ${ttLine} is a starting point — we'd grow that fast.` : `We'd build your TikTok from zero using your existing brand.`}
-
-Want me to show you what that would look like for ${bname}?`
-    });
-  }
-
-  // ── Segment 2: Strong TikTok, weak/no IG ──
-  if (tt > 200 || (tt > ig * 2)) {
-    segments.push({
-      icon: '🎵', label: 'TikTok Strong, No IG',
-      desc: 'Good TikTok but Instagram is weak or missing',
-      script: `${hey}I found ${ttHandle || bname} on TikTok — ${tt ? `${ttLine} is impressive` : 'you have a TikTok presence'}, and it tells me you know how to create content that people actually watch.
-
-But here's the thing: TikTok drives attention. Instagram drives bookings.
-
-${N.them.charAt(0).toUpperCase() + N.them.slice(1)} — they discover you on TikTok, then go to Instagram to decide if they trust you enough to ${N.action}. If your Instagram isn't polished, you're losing those ${N.clients} at the finish line.
-
-${ig ? `Your ${igLine} is a start, but it needs to match the energy of your TikTok.` : `Right now you don't have an Instagram presence to catch those people.`}
-
-We build out the Instagram side — content, branding, local targeting — so your TikTok audience has somewhere to land and actually convert.
-
-Can I show you what a 30-day plan would look like to connect both platforms?`
-    });
-  }
-
-  // ── Segment 3: Strong on both ──
-  if (ig > 500 && tt > 500) {
-    segments.push({
-      icon: '🚀', label: 'Strong IG + TikTok',
-      desc: 'Active presence on both platforms',
-      script: `${hey}I was looking at ${bname} — ${igLine} on Instagram and ${ttLine} on TikTok. That's honestly more than most ${N.biz}s I come across.
-
-${engLow && engExplain ? `Here's what caught my eye though: ${engExplain}. That means your posts aren't reaching new people the way they should be.` : `You've clearly built something real. The question is whether those followers are actually turning into ${N.clients}.`}
-
-The businesses we work with at your size typically have one of two problems: either their content isn't converting, or they're not running local targeting to pull in the people nearby who aren't following them yet.
-
-We come in, audit both accounts, and build a strategy that turns your existing audience into a consistent source of new ${N.clients} — without you spending more time on your phone.
-
-${engHigh ? `With engagement as strong as yours, there's a real opportunity to scale fast.` : `Even a small tweak to how you're posting can dramatically change your reach.`}
-
-Would it make sense to jump on a quick call this week?`
-    });
-  }
-
-  // ── Segment 4: High followers, low engagement ──
-  if (ig > 2000 && engLow) {
-    segments.push({
-      icon: '📉', label: 'Big Following, Low Engagement',
-      desc: 'Lots of followers but audience is not engaging',
-      script: `${hey}I was looking at ${handle || bname} on Instagram — ${igLine} is a solid number.
-
-But I noticed something: ${engExplain || `the engagement rate is pretty low`}. What that means in plain English is that most of your followers aren't actually seeing your posts. Instagram's algorithm decides what to show people, and when engagement is low, it stops pushing your content out.
-
-This is actually a really common problem for accounts that grew fast or bought followers at some point — and it's fixable.
-
-We work with ${N.biz}s to clean up their content strategy: posting at the right times, using the right formats, engaging the audience you already have. When we do that, the algorithm starts showing your posts to way more people — including locals who've never heard of you.
-
-You don't need more followers. You need your existing ${fmtNum(ig)} to actually see what you're putting out.
-
-Want to see what a content reset looks like for an account like yours?`
-    });
-  }
-
-  // ── Segment 5: No website ──
-  if (!hasWeb) {
-    segments.push({
-      icon: '🌐', label: 'No Website',
-      desc: 'Has social presence but no website',
-      script: `${hey}I was looking at ${bname}${handle ? ` — found ${handle} on Instagram` : ''}.
-
-One thing I noticed: you don't have a website. And I know that might seem fine because you have social media, but here's what's actually happening:
-
-When someone sees your content and wants to ${N.action}, they go looking for a place to actually do it — a menu, a booking link, an address, a reason to trust you. If there's no website, a lot of them just keep scrolling.
-
-${ig ? `You've got ${igLine} — that's real attention. You just need somewhere to send it.` : `Social media is great for getting attention. You need somewhere to send it.`}
-
-We build out the full digital presence — website, booking flow, and the social content that drives traffic to it — so that when someone finds ${bname}, they can actually become a ${N.clients.replace(/s$/,'')}.
-
-This is one of the highest-ROI moves a ${N.biz} can make right now because most of your competitors have the same problem.
-
-Worth a quick conversation?`
-    });
-  }
-
-  // ── Segment 6: No social at all ──
+  // ─────────────────────────────────────────────
+  // GROUP 1 — No social at all
+  // ─────────────────────────────────────────────
   if (!ig && !tt) {
-    segments.push({
-      icon: '👻', label: 'No Social Presence',
+    segments.push({ icon: '👻', label: 'No Social At All',
       desc: 'No Instagram or TikTok found',
       script: `${hey}I was researching ${N.biz}s in the area and came across ${bname}.
 
-I'll be straightforward: I couldn't find you on Instagram or TikTok. And right now, that means ${N.them} in your area don't know you exist online.
+I'll be straight with you: I couldn't find you on Instagram or TikTok anywhere. And right now, ${N.them} are making their decision on social media before they ever think about Google. If you're not there, you're not even in the conversation.
 
-Here's why that matters more than ever: the way ${N.clients} find a ${N.biz} has completely changed. They're not Googling first anymore — they're opening Instagram or TikTok, seeing a post or reel that looks good, and deciding based on that. If you're not there, you don't get considered.
+The ${N.biz}s we work with that start from scratch actually see the fastest results — no cleanup, no bad habits to fix. We build the accounts, shoot or source the content, and grow your presence from day one.
 
-The businesses we work with who start from zero see the fastest results, honestly — because there's no cleanup, just growth from day one.
+${!hasWeb ? `You also don't have a website showing up, so right now there's nowhere for people to land even if they do find you.` : `You do have a website, so you've got somewhere to send people once we build the social presence.`}
 
-We handle everything: account setup, content creation, local growth strategy. By month two, you'll have a real presence that's bringing in new ${N.clients}.
+By month two you'd have a real Instagram and TikTok presence pulling in local ${N.clients} who've never heard of you before.
 
-Can I show you what that looks like for a ${N.biz} your size?`
+Can I show you what that looks like?`
     });
   }
 
-  // ── Segment 7: General (always include as fallback) ──
+  // ─────────────────────────────────────────────
+  // GROUP 2 — Ghost account (has handle, basically zero followers)
+  // ─────────────────────────────────────────────
+  if (ghostIg) {
+    segments.push({ icon: '💀', label: 'Ghost Account',
+      desc: 'Has an Instagram handle but almost no followers — set up and abandoned',
+      script: `${hey}I found ${handle} on Instagram — it looks like the account was set up but never really got off the ground. ${ig < 50 ? `Only ${ig} followers` : 'Very few followers'} and not much activity.
+
+That actually tells me a lot: someone tried to make it work, it didn't get traction, and it probably got dropped. I see that constantly with ${N.biz}s.
+
+Here's the thing — you've got the username locked in, which is step one. The problem was almost certainly one of three things: no posting strategy, no content consistency, or no audience targeting. All of that is fixable.
+
+We take accounts like yours and treat it like a launch: fresh content, the right hashtag and audio strategy, and local targeting so real ${N.clients} in your area start following and showing up.
+
+Most accounts we start from scratch like this see their first 500 real local followers within 60 days.
+
+Would you want to see what a restart looks like?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 3 — IG micro only (50–499, no TikTok)
+  // ─────────────────────────────────────────────
+  if (igMicro && !tt) {
+    segments.push({ icon: '🌱', label: 'IG Micro, No TikTok',
+      desc: `Small Instagram (${igStr} followers), no TikTok at all`,
+      script: `${hey}I found ${handle || bname} on Instagram — ${igStr} followers, and it looks like you're posting but haven't cracked growth yet. No TikTok presence either.
+
+This is actually the most common situation I come across with ${N.biz}s, and it's very solvable.
+
+At this stage, the issue isn't effort — it's usually the content strategy and the fact that Instagram and TikTok together compound each other. When we run both platforms simultaneously, growth on each one accelerates the other.
+
+We'd build out both your Instagram and TikTok at the same time — content that works on both, local targeting that pulls in ${N.clients} within a few miles of you, and a posting schedule that actually builds momentum.
+
+${!hasWeb ? `We'd also get you a proper website so people have somewhere to land.` : ''}
+
+Most ${N.biz}s at your stage are at 2–3k real local followers within 90 days. Want me to show you what that timeline looks like?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 4 — IG growing, no TikTok (500–4,999)
+  // ─────────────────────────────────────────────
+  if (igGrowing && !tt) {
+    segments.push({ icon: '📸', label: `IG Growing (${igStr}), No TikTok`,
+      desc: `Decent Instagram (${igStr} followers) but no TikTok`,
+      script: `${hey}I came across ${handle || bname} on Instagram — ${igStr} followers, which tells me you've put in real work here.
+
+But I noticed you're not on TikTok at all, and that's a significant gap right now.
+
+Here's what's happening: ${N.them} are spending time on TikTok first, then checking Instagram to verify before they decide to ${N.action}. You're winning the verification step but missing the discovery step entirely — which means you're invisible to a huge chunk of potential ${N.clients}.
+
+The good news is you already have content and a brand voice from Instagram. We take what you're already doing and repurpose it for TikTok — same shoot, same content, reformatted. No extra filming on your end.
+
+${engLow && engExplain ? `I also noticed ${engExplain}, so there's room to improve how Instagram is serving your existing audience too.` : ''}
+
+Between growing TikTok from your existing content and tightening up the Instagram strategy, there's a real opportunity here.
+
+Want to jump on a quick call this week?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 5 — IG big, no TikTok (5,000+)
+  // ─────────────────────────────────────────────
+  if (igBig && !tt) {
+    segments.push({ icon: '📸🔥', label: `IG Strong (${igStr}), No TikTok`,
+      desc: `Strong Instagram (${igStr} followers) but completely absent on TikTok`,
+      script: `${hey}I was looking at ${handle || bname} — ${igStr} Instagram followers. That's a genuinely strong account for a ${N.biz}.
+
+Here's what surprised me though: you're not on TikTok at all.
+
+With a following your size, you're leaving a lot of money on the table. TikTok's local discovery algorithm is the most powerful thing in social media right now for ${N.biz}s — ${N.them} are finding places on TikTok and then going to Instagram to confirm before they ${N.action}. You're only getting the second half of that journey.
+
+And the good news is the content lift is almost zero — you've already proven what works. We clip and reformat what you're already creating for Instagram into TikTok-native content. Accounts your size typically gain 1,000–3,000 TikTok followers in the first 30 days from a standing start.
+
+${engLow && engExplain ? `I'd also want to take a look at your engagement — ${engExplain}, which means the algorithm isn't amplifying your posts the way it should.` : ''}
+
+Can I put together a quick audit showing what we'd do specifically?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 6 — TikTok micro only (50–499, no IG)
+  // ─────────────────────────────────────────────
+  if (ttMicro && ig < 100) {
+    segments.push({ icon: '🎵🌱', label: `TikTok Micro (${ttStr}), No IG`,
+      desc: `Small TikTok presence (${ttStr} followers), no Instagram`,
+      script: `${hey}I found ${ttHandle || bname} on TikTok — ${ttStr} followers. It looks like you're getting started there, which is smart.
+
+But you're missing Instagram entirely, and that's where the conversion happens.
+
+TikTok is great for getting discovered — people find you in their feed. But when they want to actually ${N.action}, they go to Instagram to look at your profile, see your vibe, check your reviews, and make the decision. Without Instagram, that trust step doesn't exist and they move on to ${N.competitors}.
+
+We'd build both simultaneously — grow your TikTok past the micro stage while building a proper Instagram presence that converts the traffic TikTok sends you.
+
+This combination is honestly the fastest growth path for a ${N.biz} right now.
+
+Want to see a 60-day roadmap for both platforms?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 7 — TikTok growing, no IG (500–4,999)
+  // ─────────────────────────────────────────────
+  if (ttGrowing && ig < 200) {
+    segments.push({ icon: '🎵📈', label: `TikTok Growing (${ttStr}), No IG`,
+      desc: `Good TikTok (${ttStr} followers) but no Instagram presence`,
+      script: `${hey}I found ${ttHandle || bname} on TikTok — ${ttStr} followers is real traction. You're clearly putting out content that people are watching.
+
+Here's the gap: TikTok drives awareness but Instagram closes the deal.
+
+When someone watches your TikTok and gets curious, they go to your Instagram to make the decision to ${N.action}. Right now you don't have one — or at least not one that's working. So you're building all this awareness and losing the conversion at the finish line.
+
+We take your TikTok content, repurpose it for Instagram, build out a proper profile, and run local targeting so the Instagram audience grows in parallel. Within 30 days you'd have both platforms working together instead of just one carrying all the weight.
+
+${!hasWeb ? `A proper website booking link in your bio would also complete the funnel.` : ''}
+
+Can I show you exactly what that looks like for ${bname}?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 8 — TikTok big, no IG (5,000+)
+  // ─────────────────────────────────────────────
+  if (ttBig && ig < 200) {
+    segments.push({ icon: '🎵🔥', label: `TikTok Dominant (${ttStr}), No IG`,
+      desc: `Very strong TikTok (${ttStr} followers), virtually no Instagram`,
+      script: `${hey}I came across ${ttHandle || bname} on TikTok — ${ttStr} followers is impressive. You've built a real audience there.
+
+But here's something that's probably costing you ${N.clients} every single day: you're not on Instagram.
+
+${N.them.charAt(0).toUpperCase() + N.them.slice(1)} — they see your TikTok, they want to know more, they look you up on Instagram, and they find nothing. So they ${N.action.includes('book') ? 'book with' : 'go to'} whoever shows up there instead.
+
+With ${ttStr} TikTok followers, you have enough brand awareness to launch an Instagram that blows up fast. We'd build it out, cross-promote from your TikTok audience, and have you at 1,000+ Instagram followers within 30 days — turning that TikTok audience into a real conversion machine.
+
+This is the highest-leverage move you could make right now.
+
+Would you want to see what that build-out looks like?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 9 — TikTok dominant (TT >> IG, both present)
+  // ─────────────────────────────────────────────
+  if (ttDominant && ig >= 100) {
+    segments.push({ icon: '🎵💪', label: `TikTok Dominant (${ttStr} vs ${igStr} IG)`,
+      desc: `TikTok far outperforms Instagram — ${ttStr} TT vs ${igStr} IG`,
+      script: `${hey}I was looking at ${bname} — your TikTok is at ${ttStr} followers and your Instagram is at ${igStr}. That's a big gap.
+
+What that tells me is your TikTok content is working — but your Instagram isn't keeping up. And that matters because they serve completely different roles: TikTok gets you discovered, Instagram gets you trusted and booked.
+
+Right now your TikTok is sending people to your Instagram, and your Instagram probably isn't converting them the way it should. ${N.clients.charAt(0).toUpperCase() + N.clients.slice(1)} expect the Instagram to match the energy of what got them interested.
+
+We'd take your TikTok content and rebuild the Instagram strategy around it — consistent branding, better hooks, local targeting — so both platforms are working together instead of TikTok doing all the heavy lifting.
+
+Can I put together a quick look at what's holding your Instagram back?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 10 — IG dominant (IG >> TT, both present)
+  // ─────────────────────────────────────────────
+  if (igDominant && tt >= 100) {
+    segments.push({ icon: '📸💪', label: `IG Dominant (${igStr} vs ${ttStr} TT)`,
+      desc: `Instagram far outperforms TikTok — ${igStr} IG vs ${ttStr} TT`,
+      script: `${hey}I came across ${handle || bname} — ${igStr} Instagram followers, which is solid. I noticed you're on TikTok too but it's at ${ttStr}.
+
+That gap tells me TikTok probably felt like too much work to build from scratch after Instagram was already going — I hear that a lot.
+
+Here's why it's worth fixing: TikTok's local discovery algorithm is currently outperforming Instagram's for reaching new ${N.clients} in your area who've never heard of you. Instagram is great for keeping people engaged once they know you. TikTok is how they find you in the first place.
+
+You already have the content from your Instagram. We take it, reformat it for TikTok, post it consistently, and build your TikTok to match your Instagram presence within 60–90 days.
+
+${N.clients.charAt(0).toUpperCase() + N.clients.slice(1)} find you on TikTok, verify on Instagram, then ${N.action}. You need both sides of that funnel.
+
+Want to talk through what that would look like?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 11 — Both weak (both < 500)
+  // ─────────────────────────────────────────────
+  if (bothWeak && ig >= 50 && tt >= 50) {
+    segments.push({ icon: '📊', label: `Both Weak (IG ${igStr} / TT ${ttStr})`,
+      desc: 'On both platforms but neither is working yet',
+      script: `${hey}I found ${handle || bname} — you're on both Instagram (${igStr} followers) and TikTok (${ttStr} followers), which tells me you know these platforms matter.
+
+But neither one has gotten real traction yet, and that's actually the most common place I see ${N.biz}s stuck.
+
+Being on both without a strategy means you're doing double the work for half the result. The issue is usually the same thing on both: inconsistent posting, content that isn't optimized for each platform's algorithm, and no local targeting.
+
+We come in and fix all three simultaneously — one content shoot feeds both platforms, we optimize for each algorithm differently, and we run local audience targeting so real nearby ${N.clients} start finding you.
+
+Most ${N.biz}s at your stage hit 1,000+ followers on each platform within 60 days with the right system.
+
+Can I walk you through what that system looks like for ${bname}?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 12 — Both medium, good engagement
+  // ─────────────────────────────────────────────
+  if (ig >= 500 && ig < 5000 && tt >= 500 && tt < 5000 && !engLow) {
+    segments.push({ icon: '📈', label: `Both Growing (IG ${igStr} / TT ${ttStr})`,
+      desc: 'Solid presence on both, good engagement — ready to scale',
+      script: `${hey}I was looking at ${bname} — ${igStr} on Instagram and ${ttStr} on TikTok. ${engHigh && engExplain ? `And ${engExplain} — that engagement rate is genuinely impressive.` : `You've got real traction on both.`}
+
+You're in a better position than probably 90% of the ${N.biz}s I look at. The question is what's next.
+
+At this stage, the thing that separates businesses that plateau here from ones that break through is usually two things: content quality consistency, and local targeting. Most businesses at your size are still relying on organic reach, which only gets you so far.
+
+We take accounts like yours and put a system around them — content calendar, local ad targeting, story strategy, UGC campaigns — so your existing audience converts at a higher rate and you're consistently pulling in new ${N.clients} from around you.
+
+Given what you've already built, I think you could 2-3x your ${N.clients} flow from social within 90 days.
+
+Would you be open to a quick call to look at your accounts?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 13 — Both big and strong engagement
+  // ─────────────────────────────────────────────
+  if (bothStrong && !engLow) {
+    segments.push({ icon: '🚀', label: `Both Strong (IG ${igStr} / TT ${ttStr})`,
+      desc: 'Strong on both platforms — focus on monetizing the audience',
+      script: `${hey}I was looking at ${bname} — ${igStr} on Instagram, ${ttStr} on TikTok. ${engHigh && engExplain ? `And ${engExplain}, which is well above average.` : `That's a real audience.`}
+
+Honestly, you're one of the stronger accounts I've come across in this space. Most ${N.biz}s I look at are either on one platform or have the numbers without the engagement. You've got both.
+
+The conversation I want to have with you is different from what I pitch to most people — it's not about building an audience, it's about monetizing the one you have.
+
+With ${igStr} + ${ttStr} followers and solid engagement, you should be seeing a steady, measurable flow of new ${N.clients} directly attributable to your social media. If that's not happening, the gap is almost always in the call-to-action strategy and converting viewers into action.
+
+We work with accounts your size to close that gap — content that drives specific actions (${N.action}), targeted local campaigns, and retargeting your existing audience.
+
+I'd love to show you what that conversion layer looks like for ${bname}. 15 minutes?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 14 — Big following, dead engagement
+  // ─────────────────────────────────────────────
+  if (ig >= 2000 && engLow) {
+    segments.push({ icon: '📉', label: `Big Following, Dead Engagement (${fmtNum(ig)} / ${(engNum||0).toFixed(1)}%)`,
+      desc: `High followers but engagement is below 2% — audience is cold or bought`,
+      script: `${hey}I was looking at ${handle || bname} on Instagram — ${igStr} followers is a number most ${N.biz}s would kill for.
+
+But I noticed something: ${engExplain || 'the engagement rate is very low'}. In plain English, that means most of your followers aren't seeing your posts when you put them out. Instagram's algorithm shows content to a small slice of your audience first — if they don't engage quickly, it doesn't push it further.
+
+This happens for a few reasons: an older account that bought followers at some point, content that's gotten stale, or posting at the wrong times. All of it is fixable.
+
+We do content resets for accounts exactly like this — we audit what's dragging your engagement down, shift the content format, clean up the strategy, and re-engage your existing audience. When the algorithm sees better engagement, it starts distributing your posts to thousands of people who've never seen your page.
+
+You've already done the hard part of building the following. You just need it to work again.
+
+Want me to run a quick audit on your account?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 15 — Dormant / hasn't posted in months
+  // ─────────────────────────────────────────────
+  if (dormant || (ppm > 0 && ppm < 2 && ig > 200)) {
+    segments.push({ icon: '⏰', label: `Dormant / Rarely Posts`,
+      desc: `Account exists but posts very infrequently or went quiet`,
+      script: `${hey}I came across ${handle || bname} on Instagram${ig ? ` — ${igStr} followers` : ''}.
+
+${lastPost ? `I noticed the last post was ${lastPost}.` : `The posting frequency is very low — about ${ppm} time${ppm===1?'':'s'} per month.`} I see this a lot with ${N.biz}s — Instagram starts out as a priority, then it becomes the last thing on the list when things get busy.
+
+Here's the problem: Instagram and TikTok algorithms penalize inactivity. When you go quiet, they stop showing your profile to new people — and even your existing followers forget you exist. You essentially have to rebuild from scratch every time you go quiet.
+
+The fix isn't posting more manually — it's having a system so it happens without you thinking about it.
+
+We handle the content creation and scheduling completely for you. You'd go from ${ppm || 'barely'}x a month to daily presence across both platforms, without adding anything to your plate.
+
+Your ${igStr ? `${igStr} followers are` : 'audience is'} worth re-engaging. Would you want to talk about what a comeback looks like?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 16 — Good numbers, inconsistent posting
+  // ─────────────────────────────────────────────
+  if (ppm >= 2 && ppm <= 5 && ig >= 500 && !dormant) {
+    segments.push({ icon: '📅', label: `Inconsistent Poster (${ppm}x/mo)`,
+      desc: `Decent following but only posting a few times a month`,
+      script: `${hey}I was looking at ${handle || bname} — ${igStr ? `${igStr} followers` : 'solid Instagram'}, and you're posting about ${ppm}x a month.
+
+That frequency is the main thing holding you back right now.
+
+Instagram and TikTok's algorithms reward consistency more than anything else. Accounts that post daily get shown to 3–5x more new people than ones posting ${ppm}x a month — even with the same quality content. You're doing the work, but the algorithm isn't giving you full credit because the gaps between posts are too long.
+
+The issue is usually time — creating content consistently is genuinely hard when you're running a ${N.biz}.
+
+We solve that completely. One content shoot per month gives us enough to post daily across Instagram and TikTok for the whole month. You spend a couple hours with us once and the rest runs on autopilot.
+
+${engHigh && engExplain ? `Your engagement is actually solid — ${engExplain}. The audience likes your content. More of it would scale fast.` : ''}
+
+Can I show you what a daily posting system looks like for a ${N.biz} your size?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 17 — Good social, no website
+  // ─────────────────────────────────────────────
+  if (!hasWeb && (ig >= 200 || tt >= 200)) {
+    segments.push({ icon: '🌐', label: 'No Website (Social Traffic Going Nowhere)',
+      desc: 'Has social presence but no website to send traffic to',
+      script: `${hey}I came across ${handle || bname}${ig ? ` — ${igStr} Instagram followers` : ''}${tt ? `${ig ? ' and' : ' —'} ${ttStr} on TikTok` : ''}.
+
+One thing jumped out: no website. And I know it might seem like social is enough, but here's what's actually happening:
+
+When someone sees your content and wants to ${N.action}, they look for a place to do it. They want a menu, a booking page, a phone number, an address — something that says "yes, this is a real, established business." Without a website, you're creating doubt right at the moment they're ready to convert.
+
+${ig && ig > 1000 ? `You've got ${igStr} followers building trust — a website is the last step that closes them.` : `Your social presence is building awareness, but it needs a destination.`}
+
+We build the full package: a clean professional website with your booking or contact flow, integrated with your social channels so everything drives traffic to one place.
+
+The businesses that see the biggest jump in ${N.clients} are usually the ones that add the website after getting their social going — it's the missing piece.
+
+Worth talking through what that looks like?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 18 — Website only, no social
+  // ─────────────────────────────────────────────
+  if (hasWeb && !ig && !tt) {
+    segments.push({ icon: '🏢', label: 'Website Only, No Social',
+      desc: 'Has a website but no Instagram or TikTok',
+      script: `${hey}I was looking at ${bname} — you've got a website, which tells me you've thought about your online presence.
+
+But I couldn't find you on Instagram or TikTok, and that's actually a bigger gap than not having a website in 2025.
+
+Here's what's changed: ${N.them} aren't starting on Google anymore. They're opening Instagram or TikTok, finding a ${N.biz} that looks great, checking the bio for the website, and going there to book or get info. The website is step three now — social is step one.
+
+Right now you're showing up for step three but not steps one or two, which means you're only getting the people who specifically searched for you — not the ones who are open to trying somewhere new.
+
+We'd build out your Instagram and TikTok from scratch, create content that works on both, and link everything back to your website. You'd go from invisible on social to consistently discoverable in 60 days.
+
+Can I show you what that looks like for ${bname}?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 19 — Strong social, no website (both platforms)
+  // ─────────────────────────────────────────────
+  if (!hasWeb && ig >= 1000 && tt >= 500) {
+    segments.push({ icon: '🔗', label: `Strong Social, No Website (IG ${igStr} / TT ${ttStr})`,
+      desc: 'Killing it on social but no website to complete the funnel',
+      script: `${hey}I was looking at ${bname} — ${igStr} on Instagram and ${ttStr} on TikTok. That's a genuinely impressive social presence.
+
+But one thing stood out: no website. And with the audience you've built, that's probably costing you ${N.clients} every day.
+
+Here's what's happening: someone finds you on TikTok, loves it, checks your Instagram, wants to ${N.action} — and then they hit a bio link that goes nowhere, or they have to DM you to get info. That friction kills conversions. People move on.
+
+With an audience your size, adding a proper website with a booking or contact flow is one of the highest-leverage moves you can make. We'd build it out and integrate it directly with your Instagram and TikTok bios — every piece of content becomes a funnel.
+
+You've already done the hardest part. This is just closing the loop.
+
+Would you want to talk through what that looks like?`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 20 — Has email, no social (direct email angle)
+  // ─────────────────────────────────────────────
+  if (hasEmail && !ig && !tt) {
+    segments.push({ icon: '📧', label: 'Email Outreach (No Social)',
+      desc: 'Has a business email — use direct email pitch since no social presence',
+      script: `Hi,
+
+I came across ${bname} while researching ${N.biz}s in the area and noticed you don't have an Instagram or TikTok presence.
+
+I'll keep this short: right now, ${N.them} are making their choice on social media before they ever search on Google. If you're not on Instagram or TikTok, you're not in that decision at all — your ${N.competitors} are.
+
+We help ${N.biz}s build and manage their social media from scratch: account setup, content creation, local audience growth. We handle everything so you don't have to think about it.
+
+Most ${N.biz}s we work with see their first new ${N.clients} from social within 30 days.
+
+If this is something you'd want to explore, I'd love to jump on a 15-minute call. What does your schedule look like this week?
+
+[Your name]`
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GROUP 21 — General (always last)
+  // ─────────────────────────────────────────────
   segments.push({
     icon: '📋', label: 'General Pitch',
-    desc: 'Standard script based on score and size',
+    desc: 'Standard script based on tier and account size',
     script: buildScript({ tier, size, bizType, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead })
   });
 
