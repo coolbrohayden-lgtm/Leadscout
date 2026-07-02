@@ -1116,13 +1116,16 @@ function redrawGrid(recomputeSpacing){
       const w  = topLeft.lng;
       const e  = bottomRight.lng;
       const key = `${s.toFixed(6)}_${w.toFixed(6)}`;
-      const sel = !!selectedBounds[key];
+
+      // Already selected — the existing tracked rectangle handles this cell.
+      // Skip creating a duplicate so it can't stack on top and orphan Clear.
+      if(selectedBounds[key]) continue;
 
       const rect = L.rectangle([[s,w],[no,e]], {
-        color: sel ? '#6c63ff' : 'rgba(108,99,255,0.5)',
-        weight: sel ? 2 : 1,
+        color: 'rgba(108,99,255,0.5)',
+        weight: 1,
         fillColor: '#6c63ff',
-        fillOpacity: sel ? 0.3 : 0.07,
+        fillOpacity: 0.07,
         interactive: true,
       }).addTo(map);
 
