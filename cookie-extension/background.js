@@ -295,7 +295,7 @@ async function scanPageForSocials(url) {
         if (tabId === tab.id && info.status === 'complete') {
           clearTimeout(timeout);
           chrome.tabs.onUpdated.removeListener(listener);
-          setTimeout(resolve, 1500); // extra wait for JS to render
+          setTimeout(resolve, 3500); // extra wait for JS frameworks (Angular/React/Vue) to fully render
         }
       });
     });
