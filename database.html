@@ -68,6 +68,14 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .pipe-card .socials{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-bottom:5px;}
 .pipe-card .foot{display:flex;gap:5px;align-items:center;}
 .pipe-empty{font-size:10px;color:var(--muted);text-align:center;padding:14px 0;}
+.add-stage-btn{min-width:180px;flex-shrink:0;border:2px dashed var(--border);border-radius:10px;background:transparent;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;padding:20px;height:fit-content;transition:.15s;}
+.add-stage-btn:hover{border-color:var(--accent);color:var(--accent);}
+.stage-del{margin-left:4px;border:none;background:transparent;color:var(--muted);font-size:11px;cursor:pointer;padding:0 3px;border-radius:3px;}
+.stage-del:hover{color:var(--hot);}
+.stage-swatch{width:22px;height:22px;border-radius:5px;cursor:pointer;border:2px solid transparent;display:inline-block;}
+.stage-swatch.sel{border-color:#fff;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--accent);color:var(--text);font-size:12px;font-weight:600;padding:9px 18px;border-radius:8px;z-index:300;opacity:0;transition:opacity .25s;pointer-events:none;}
+.toast.show{opacity:1;}
 
 /* Table */
 .table-wrap{overflow-x:auto;padding:0 20px 20px;}
@@ -248,6 +256,41 @@ tr:hover td{background:var(--surface2);}
   <div class="script-modal" id="scriptModalInner"></div>
 </div>
 
+<div id="stageModalOverlay" class="script-modal-overlay" style="display:none" onclick="if(event.target===this)closeStageModal()">
+  <div class="script-modal" style="max-width:360px">
+    <button class="script-close" onclick="closeStageModal()">✕</button>
+    <h3 style="margin-bottom:14px">New Pipeline Stage</h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Stage name
+        <input id="stageName" placeholder="e.g. Follow Up Friday" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:7px 10px;outline:none"/>
+      </label>
+      <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Emoji (optional)
+        <input id="stageIcon" placeholder="📁" maxlength="4" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:7px 10px;outline:none;width:80px"/>
+      </label>
+      <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Color
+        <div id="stageColors" style="display:flex;gap:6px;margin-top:5px">
+          <span class="stage-swatch sel" data-c="#6c63ff" style="background:#6c63ff" onclick="pickStageColor(this)"></span>
+          <span class="stage-swatch" data-c="#f5a623" style="background:#f5a623" onclick="pickStageColor(this)"></span>
+          <span class="stage-swatch" data-c="#4ade80" style="background:#4ade80" onclick="pickStageColor(this)"></span>
+          <span class="stage-swatch" data-c="#ff5f5f" style="background:#ff5f5f" onclick="pickStageColor(this)"></span>
+          <span class="stage-swatch" data-c="#38bdf8" style="background:#38bdf8" onclick="pickStageColor(this)"></span>
+          <span class="stage-swatch" data-c="#e879f9" style="background:#e879f9" onclick="pickStageColor(this)"></span>
+        </div>
+      </div>
+      <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Automation when a lead is dropped here
+        <select id="stageAction" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:7px 10px;outline:none">
+          <option value="none">None — just a stage</option>
+          <option value="email">📧 Open email with pitch pre-filled</option>
+          <option value="igdm">💬 Copy pitch + open Instagram DM</option>
+          <option value="call">📱 Open phone dialer</option>
+        </select>
+      </label>
+      <button class="copy-btn" style="margin-top:4px" onclick="saveStage()">＋ Create Stage</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
 <script>
 let allLeads = [];
 let blacklist = [];
@@ -273,6 +316,7 @@ async function load(){
   allLeads = await dbAll('leads');
   blacklist = await dbAll('blacklist');
   await migrateLocalExports();
+  await loadCustomStages();
   renderStats();
   buildLocationOptions();
   buildBizTypeChips();
@@ -466,6 +510,7 @@ function render(){
             <option value="interested" ${status==='interested'?'selected':''}>👀 Interested</option>
             <option value="signed"     ${status==='signed'    ?'selected':''}>✅ Signed</option>
             <option value="denied"     ${status==='denied'    ?'selected':''}>🚫 Denied</option>
+            ${customStages.map(s=>`<option value="${s.id}" ${status===s.id?'selected':''}>${s.icon||'📁'} ${s.title}</option>`).join('')}
           </select>
         </td>
         <td><input class="notes-input" value="${(l.notes||'').replace(/"/g,'&quot;')}" placeholder="Add notes…" onblur="saveNotes('${l.place_id}',this.value)"/></td>
@@ -491,23 +536,137 @@ function setView(v){
 }
 
 const PIPE_STAGES=[
-  {id:'new',        title:'🆕 New',        color:'#7d8590'},
-  {id:'contacted',  title:'📞 Contacted',  color:'#6c63ff'},
-  {id:'interested', title:'👀 Interested', color:'#f5a623'},
-  {id:'signed',     title:'✅ Signed',     color:'#4ade80'},
-  {id:'denied',     title:'🚫 Denied',     color:'#555'},
+  {id:'new',        title:'🆕 New',        color:'#7d8590', builtin:true},
+  {id:'contacted',  title:'📞 Contacted',  color:'#6c63ff', builtin:true},
+  {id:'interested', title:'👀 Interested', color:'#f5a623', builtin:true},
+  {id:'signed',     title:'✅ Signed',     color:'#4ade80', builtin:true},
+  {id:'denied',     title:'🚫 Denied',     color:'#555',    builtin:true},
 ];
 
+// ── Custom stages (shared with the team via shared_settings.pipeline_stages) ──
+let customStages = [];
+
+async function loadCustomStages(){
+  try{
+    const {data, error} = await supabaseClient.from('shared_settings').select('pipeline_stages').eq('id',1).single();
+    if(error) throw error;
+    customStages = JSON.parse(data?.pipeline_stages || '[]');
+  }catch(e){
+    // Column missing or fetch failed — fall back to this browser only
+    customStages = JSON.parse(localStorage.getItem('leadscout_custom_stages') || '[]');
+  }
+}
+
+async function saveCustomStages(){
+  localStorage.setItem('leadscout_custom_stages', JSON.stringify(customStages));
+  const {error} = await supabaseClient.from('shared_settings').update({pipeline_stages: JSON.stringify(customStages)}).eq('id',1);
+  if(error) console.warn('Custom stages saved locally only — add a pipeline_stages (text) column to shared_settings to sync across the team:', error.message);
+}
+
+function getAllStages(){ return [...PIPE_STAGES, ...customStages]; }
+
+const ACTION_ICONS = { email:'📧', igdm:'💬', call:'📱' };
+
 function renderPipeline(leads, c){
-  c.innerHTML = `<div class="pipeline-wrap">` + PIPE_STAGES.map(st=>{
+  c.innerHTML = `<div class="pipeline-wrap">` + getAllStages().map(st=>{
     const cards = leads.filter(l=>(l.status||'new')===st.id);
+    const title = st.builtin ? st.title : `${st.icon||'📁'} ${st.title}`;
+    const zap = st.action && st.action!=='none' ? `<span title="Automation: ${ACTION_ICONS[st.action]||''} runs when a lead is dropped here" style="font-size:11px">⚡</span>` : '';
+    const del = st.builtin ? '' : `<button class="stage-del" onclick="deleteStage('${st.id}')" title="Delete this stage">✕</button>`;
     return `<div class="pipe-col" style="--pipe-color:${st.color}">
-      <div class="pipe-col-head"><span class="t">${st.title}</span><span class="n">${cards.length}</span></div>
+      <div class="pipe-col-head"><span class="t">${title}</span>${zap}<span class="n">${cards.length}</span>${del}</div>
       <div class="pipe-col-body" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')">
         ${cards.length ? cards.map(pipeCard).join('') : '<div class="pipe-empty">Drop leads here</div>'}
       </div>
     </div>`;
-  }).join('') + `</div>`;
+  }).join('') + `<button class="add-stage-btn" onclick="openStageModal()">＋ Add Stage</button></div>`;
+}
+
+// ── Stage modal ──
+let _stageColor = '#6c63ff';
+function openStageModal(){
+  document.getElementById('stageName').value='';
+  document.getElementById('stageIcon').value='';
+  document.getElementById('stageAction').value='none';
+  document.getElementById('stageModalOverlay').style.display='flex';
+  document.getElementById('stageName').focus();
+}
+function closeStageModal(){ document.getElementById('stageModalOverlay').style.display='none'; }
+function pickStageColor(el){
+  document.querySelectorAll('#stageColors .stage-swatch').forEach(s=>s.classList.remove('sel'));
+  el.classList.add('sel');
+  _stageColor = el.dataset.c;
+}
+async function saveStage(){
+  const title = document.getElementById('stageName').value.trim();
+  if(!title){ alert('Give the stage a name.'); return; }
+  const icon = document.getElementById('stageIcon').value.trim() || '📁';
+  const action = document.getElementById('stageAction').value;
+  const id = 'cs_' + title.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'') + '_' + Date.now().toString(36);
+  customStages.push({ id, title, icon, color:_stageColor, action });
+  await saveCustomStages();
+  closeStageModal();
+  render();
+}
+async function deleteStage(stageId){
+  const st = customStages.find(s=>s.id===stageId);
+  if(!st) return;
+  const inStage = allLeads.filter(l=>l.status===stageId);
+  if(!confirm(`Delete stage "${st.title}"?${inStage.length?` ${inStage.length} lead(s) in it will move back to New.`:''}`)) return;
+  customStages = customStages.filter(s=>s.id!==stageId);
+  await saveCustomStages();
+  if(inStage.length){
+    inStage.forEach(l=>l.status='new');
+    await supabaseClient.from('leads').update({status:'new'}).eq('status', stageId);
+  }
+  renderStats(); render();
+}
+
+// ── Stage automations ──
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+// Compute the general pitch script for a lead (same math as showSalesScript)
+function getLeadScript(lead){
+  let eng=null;
+  if(lead.ig_engagement){ try{ eng = typeof lead.ig_engagement==='string' ? JSON.parse(lead.ig_engagement) : lead.ig_engagement; }catch(e){} }
+  const followers=lead.ig_followers||0;
+  const engRate=eng?.engagement_rate||eng?.engagement_rate_percentages||null;
+  const posts=eng?.posts_details||[];
+  const avgLikes=posts.length?Math.round(posts.reduce((s,p)=>s+(p.likes||0),0)/posts.length):null;
+  const avgComments=posts.length?Math.round(posts.reduce((s,p)=>s+(p.comments||0),0)/posts.length):null;
+  let postsPerMonth=null;
+  const sorted=[...posts].filter(p=>p.taken_at).sort((a,b)=>b.taken_at-a.taken_at);
+  if(sorted.length>=2){
+    const months=(sorted[0].taken_at*1000 - sorted[sorted.length-1].taken_at*1000)/(1000*60*60*24*30.5);
+    postsPerMonth=months>0?Math.round(sorted.length/months):sorted.length;
+  }
+  const lastPost=posts[0]?.time_ago||null;
+  const size=followers>=10000?'large':followers>=1000?'medium':'small';
+  return buildScript({ tier:(lead.label||'cold').toLowerCase(), size, bizType:lead.business_type||'restaurant', name:lead.name||'this business', handle:lead.instagram?`@${lead.instagram}`:'', followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead });
+}
+
+function runStageAction(stage, lead){
+  if(stage.action==='email'){
+    const email = lead.business_email || lead.owner_email;
+    if(!email){ showToast(`⚠️ ${lead.name} has no email on file`); return; }
+    const subject = encodeURIComponent(`Quick idea for ${lead.name}`);
+    const body = encodeURIComponent(getLeadScript(lead));
+    window.open(`mailto:${email}?subject=${subject}&body=${body}`);
+    showToast(`📧 Email drafted to ${email}`);
+  } else if(stage.action==='igdm'){
+    if(!lead.instagram){ showToast(`⚠️ ${lead.name} has no Instagram handle`); return; }
+    navigator.clipboard.writeText(getLeadScript(lead)).catch(()=>{});
+    window.open(`https://ig.me/m/${lead.instagram}`,'_blank');
+    showToast(`💬 Pitch copied — paste it in the DM`);
+  } else if(stage.action==='call'){
+    if(!lead.phone){ showToast(`⚠️ ${lead.name} has no phone number`); return; }
+    window.open(`tel:${lead.phone.replace(/[^\d+]/g,'')}`);
+    showToast(`📱 Calling ${lead.name}`);
+  }
 }
 
 function pipeCard(l){
@@ -562,6 +721,9 @@ async function setStatus(placeId, status){
   lead.status = status;
   const {error} = await supabaseClient.from('leads').update({status, updated_by: currentUser ? currentUser.id : null, updated_at: new Date().toISOString()}).eq('place_id', placeId);
   if(error) console.error('setStatus', error);
+  // Custom stage with an automation attached? Fire it.
+  const customStage = customStages.find(s=>s.id===status);
+  if(customStage && customStage.action && customStage.action!=='none') runStageAction(customStage, lead);
   if(status==='denied'){
     const blEntry = {place_id:placeId, name:lead.name, blacklisted_by: currentUser ? currentUser.id : null, blacklisted_at: new Date().toISOString()};
     await dbPut('blacklist', blEntry);
