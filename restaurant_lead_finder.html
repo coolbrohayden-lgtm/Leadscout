@@ -867,9 +867,25 @@ function setBizType(type, btn) {
     customInput.style.display = 'block';
     customInput.focus();
     currentBizType = customInput.value.trim() || '';
-    customInput.oninput = () => { currentBizType = customInput.value.trim(); };
+    customInput.oninput = () => { currentBizType = customInput.value.trim(); filterMarkersByBizType(); };
   } else {
     customInput.style.display = 'none';
+  }
+  filterMarkersByBizType();
+}
+
+function filterMarkersByBizType() {
+  for (const lead of allLeads) {
+    if (!lead.marker) continue;
+    const leadType = lead.business_type || 'restaurant';
+    const show = currentBizType === '__custom'
+      ? true  // custom — show all until we know what they typed
+      : leadType === currentBizType;
+    if (show) {
+      if (!map.hasLayer(lead.marker)) lead.marker.addTo(map);
+    } else {
+      if (map.hasLayer(lead.marker)) map.removeLayer(lead.marker);
+    }
   }
 }
 
@@ -1853,8 +1869,11 @@ function addMarker(lead){
     html:`<div style="width:11px;height:11px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,0.5)"></div>`,
     iconSize:[11,11],iconAnchor:[5,5]
   });
-  const m=L.marker([lead.lat,lead.lng],{icon}).addTo(map)
+  const leadType = lead.business_type || 'restaurant';
+  const showOnMap = currentBizType === '__custom' || leadType === currentBizType;
+  const m=L.marker([lead.lat,lead.lng],{icon})
     .bindPopup(`<div style="font-size:13px;min-width:160px"><strong>${lead.name}</strong><br><span style="color:#888;font-size:11px">${lead.address}</span><br><br><span style="color:${color};font-weight:700">${lead.label} — ${lead.score}/200</span><br><span style="color:#666;font-size:11px">${lead.reasons}</span>${lead.instagram?`<br><a href="https://instagram.com/${lead.instagram}" target="_blank" style="color:#6c63ff;font-size:11px">@${lead.instagram}</a>`:''}</div>`);
+  if (showOnMap) m.addTo(map);
   lead.marker = m;
   gmarkers.push(m);
 }

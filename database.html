@@ -112,6 +112,11 @@ tr:hover td{background:var(--surface2);}
 .script-stat-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .script-stat-pill{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;text-align:center;}
 .script-stat-pill b{display:block;font-size:15px;color:var(--accent);}
+.seg-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.seg-tab{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--muted);transition:all .15s;}
+.seg-tab:hover{border-color:var(--accent);color:var(--text);}
+.seg-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.seg-body.hidden{display:none;}
 
 /* Blacklist section toggle */
 .section-toggle{font-size:11px;color:var(--muted);cursor:pointer;padding:8px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;}
@@ -833,6 +838,18 @@ function showSalesScript(placeId) {
   const tierEmoji = tier === 'hot' ? '🔥' : tier === 'warm' ? '🌡️' : '❄️';
   const sizeLabel = size === 'large' ? 'Large account' : size === 'medium' ? 'Mid-size account' : 'Small/new account';
 
+  // Social profile segment
+  const seg = getSocialSegment(lead, followers, engRate);
+
+  // Build one script per segment tab
+  const allSegments = getAllSegmentScripts({ tier, size, bizType, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead });
+  const tabs = allSegments.map((s, i) =>
+    `<button class="seg-tab${i===0?' active':''}" onclick="switchSegTab(this,${i})" title="${s.desc}">${s.icon} ${s.label}</button>`
+  ).join('');
+  const bodies = allSegments.map((s, i) =>
+    `<div class="seg-body${i===0?'':' hidden'}" id="segBody${i}">${s.script}</div>`
+  ).join('');
+
   document.getElementById('scriptModalInner').innerHTML = `
     <button class="script-close" onclick="closeScriptModal()">✕</button>
     <h3>${name}</h3>
@@ -840,16 +857,202 @@ function showSalesScript(placeId) {
       <span style="color:${tierColor}">${tierEmoji} ${(lead.label||'COLD').toUpperCase()}</span>
       ${handle ? `<span>${igSvg()} ${handle}</span>` : ''}
       <span>👥 ${sizeLabel}</span>
+      ${seg ? `<span title="${seg.desc}">🎯 ${seg.label}</span>` : ''}
       ${lead.score ? `<span>⭐ Score ${lead.score}</span>` : ''}
     </div>
     ${statPills}
     <div class="script-section">
-      <h4>Personalized Pitch Script</h4>
-      <div class="script-body" id="scriptText">${script}</div>
+      <h4>Pitch Scripts by Profile Type</h4>
+      <div class="seg-tabs">${tabs}</div>
+      <div class="script-body" id="scriptText">${bodies}</div>
     </div>
     <button class="copy-btn" onclick="copyScript()">📋 Copy Script</button>
   `;
   document.getElementById('scriptModalOverlay').style.display = 'flex';
+}
+
+function switchSegTab(btn, idx) {
+  btn.closest('.script-section').querySelectorAll('.seg-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  btn.closest('.script-section').querySelectorAll('.seg-body').forEach((b,i) => {
+    b.classList.toggle('hidden', i !== idx);
+  });
+}
+
+// Detect the primary social segment for this lead
+function getSocialSegment(lead, igFollowers, engRate) {
+  const ig = igFollowers || 0;
+  const tt = lead.tt_followers || 0;
+  const hasWeb = !!(lead.website || lead.url);
+  const engLow = engRate != null && Number(engRate) < 2;
+  const engHigh = engRate != null && Number(engRate) >= 5;
+
+  if (!ig && !tt) return { label: 'No Social', desc: 'No Instagram or TikTok found', icon: '👻' };
+  if (ig > 1000 && tt > 1000) return engLow
+    ? { label: 'Big Audience, Low Engagement', desc: 'Strong on both platforms but audience is cold', icon: '📉' }
+    : { label: 'Strong IG + TikTok', desc: 'Active on both platforms', icon: '🚀' };
+  if (ig > 500 && tt < 200) return { label: 'IG Only', desc: 'Good Instagram, missing TikTok', icon: '📸' };
+  if (tt > 500 && ig < 200) return { label: 'TikTok Only', desc: 'Good TikTok, weak Instagram', icon: '🎵' };
+  if (!hasWeb) return { label: 'No Website', desc: 'Has social but no website', icon: '🌐' };
+  return { label: 'Mixed Presence', desc: 'Partial social presence', icon: '📊' };
+}
+
+// Generate all segment-specific scripts for the tabs
+function getAllSegmentScripts({ tier, size, bizType, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead }) {
+  const ig = followers || 0;
+  const tt = lead.tt_followers || 0;
+  const ttHandle = lead.tiktok ? `@${lead.tiktok}` : null;
+  const hasWeb = !!(lead.website || lead.url);
+  const engLow = engRate != null && Number(engRate) < 2;
+  const engHigh = engRate != null && Number(engRate) >= 5;
+
+  const isSpa = /spa|aesthetic|medspa|med.spa|laser|beauty|wellness/i.test(bizType);
+  const isGym = /gym|fitness|yoga|pilates|crossfit/i.test(bizType);
+  const isSalon = /salon|hair|barber|nail/i.test(bizType);
+  const niche = isSpa ? 'spa' : isGym ? 'gym' : isSalon ? 'salon' : 'restaurant';
+  const NICHE = {
+    spa:    { clients:'clients',   product:'treatments',       action:'book appointments',       biz:'med spa',    them:'people booking facials, injectables, and body treatments' },
+    gym:    { clients:'members',   product:'classes & training',action:'sign up',                biz:'gym',        them:'people looking for a gym or trainer near them' },
+    salon:  { clients:'clients',   product:'services',         action:'book appointments',       biz:'salon',      them:'people deciding where to get their hair or nails done' },
+    restaurant:{ clients:'customers',product:'food',           action:'walk in or make a reservation',biz:'restaurant',them:'people deciding where to eat tonight' },
+  };
+  const N = NICHE[niche];
+  const owner = lead.owner_name ? lead.owner_name.split(' ')[0] : null;
+  const hey = owner ? `Hey ${owner}, ` : `Hey — `;
+  const bname = name || 'your business';
+  const igLine = ig ? `${fmtNum(ig)} Instagram followers` : 'your Instagram';
+  const ttLine = tt ? `${fmtNum(tt)} TikTok followers` : 'your TikTok';
+
+  const engExplain = engRate != null
+    ? `out of every 100 people who follow you, about ${Math.round(Number(engRate))} are liking or commenting`
+    : null;
+
+  const segments = [];
+
+  // ── Segment 1: Strong IG, weak/no TikTok ──
+  if (ig > 200 || !tt) {
+    segments.push({
+      icon: '📸', label: 'IG Strong, No TikTok',
+      desc: 'They have Instagram presence but are missing TikTok',
+      script: `${hey}I came across ${handle || bname} on Instagram — ${ig ? `you've built up ${igLine}` : 'you have a solid Instagram presence'}, which tells me you know how to connect with people online.
+
+Here's what I noticed though: you're not on TikTok${tt ? ` — or at least not with any real presence` : ''}.
+
+Right now TikTok is sending local ${N.clients} to ${N.biz}s like yours every single day. ${N.them.charAt(0).toUpperCase() + N.them.slice(1)} are finding places on TikTok first, then checking Instagram to verify. If you're only on one platform, you're invisible to half your potential ${N.clients}.
+
+The good news? You already have content and a following — we repurpose what you're already creating for Instagram into TikTok-ready clips. No extra work on your end.
+
+${tt ? `Your ${ttLine} is a starting point — we'd grow that fast.` : `We'd build your TikTok from zero using your existing brand.`}
+
+Want me to show you what that would look like for ${bname}?`
+    });
+  }
+
+  // ── Segment 2: Strong TikTok, weak/no IG ──
+  if (tt > 200 || (tt > ig * 2)) {
+    segments.push({
+      icon: '🎵', label: 'TikTok Strong, No IG',
+      desc: 'Good TikTok but Instagram is weak or missing',
+      script: `${hey}I found ${ttHandle || bname} on TikTok — ${tt ? `${ttLine} is impressive` : 'you have a TikTok presence'}, and it tells me you know how to create content that people actually watch.
+
+But here's the thing: TikTok drives attention. Instagram drives bookings.
+
+${N.them.charAt(0).toUpperCase() + N.them.slice(1)} — they discover you on TikTok, then go to Instagram to decide if they trust you enough to ${N.action}. If your Instagram isn't polished, you're losing those ${N.clients} at the finish line.
+
+${ig ? `Your ${igLine} is a start, but it needs to match the energy of your TikTok.` : `Right now you don't have an Instagram presence to catch those people.`}
+
+We build out the Instagram side — content, branding, local targeting — so your TikTok audience has somewhere to land and actually convert.
+
+Can I show you what a 30-day plan would look like to connect both platforms?`
+    });
+  }
+
+  // ── Segment 3: Strong on both ──
+  if (ig > 500 && tt > 500) {
+    segments.push({
+      icon: '🚀', label: 'Strong IG + TikTok',
+      desc: 'Active presence on both platforms',
+      script: `${hey}I was looking at ${bname} — ${igLine} on Instagram and ${ttLine} on TikTok. That's honestly more than most ${N.biz}s I come across.
+
+${engLow && engExplain ? `Here's what caught my eye though: ${engExplain}. That means your posts aren't reaching new people the way they should be.` : `You've clearly built something real. The question is whether those followers are actually turning into ${N.clients}.`}
+
+The businesses we work with at your size typically have one of two problems: either their content isn't converting, or they're not running local targeting to pull in the people nearby who aren't following them yet.
+
+We come in, audit both accounts, and build a strategy that turns your existing audience into a consistent source of new ${N.clients} — without you spending more time on your phone.
+
+${engHigh ? `With engagement as strong as yours, there's a real opportunity to scale fast.` : `Even a small tweak to how you're posting can dramatically change your reach.`}
+
+Would it make sense to jump on a quick call this week?`
+    });
+  }
+
+  // ── Segment 4: High followers, low engagement ──
+  if (ig > 2000 && engLow) {
+    segments.push({
+      icon: '📉', label: 'Big Following, Low Engagement',
+      desc: 'Lots of followers but audience is not engaging',
+      script: `${hey}I was looking at ${handle || bname} on Instagram — ${igLine} is a solid number.
+
+But I noticed something: ${engExplain || `the engagement rate is pretty low`}. What that means in plain English is that most of your followers aren't actually seeing your posts. Instagram's algorithm decides what to show people, and when engagement is low, it stops pushing your content out.
+
+This is actually a really common problem for accounts that grew fast or bought followers at some point — and it's fixable.
+
+We work with ${N.biz}s to clean up their content strategy: posting at the right times, using the right formats, engaging the audience you already have. When we do that, the algorithm starts showing your posts to way more people — including locals who've never heard of you.
+
+You don't need more followers. You need your existing ${fmtNum(ig)} to actually see what you're putting out.
+
+Want to see what a content reset looks like for an account like yours?`
+    });
+  }
+
+  // ── Segment 5: No website ──
+  if (!hasWeb) {
+    segments.push({
+      icon: '🌐', label: 'No Website',
+      desc: 'Has social presence but no website',
+      script: `${hey}I was looking at ${bname}${handle ? ` — found ${handle} on Instagram` : ''}.
+
+One thing I noticed: you don't have a website. And I know that might seem fine because you have social media, but here's what's actually happening:
+
+When someone sees your content and wants to ${N.action}, they go looking for a place to actually do it — a menu, a booking link, an address, a reason to trust you. If there's no website, a lot of them just keep scrolling.
+
+${ig ? `You've got ${igLine} — that's real attention. You just need somewhere to send it.` : `Social media is great for getting attention. You need somewhere to send it.`}
+
+We build out the full digital presence — website, booking flow, and the social content that drives traffic to it — so that when someone finds ${bname}, they can actually become a ${N.clients.replace(/s$/,'')}.
+
+This is one of the highest-ROI moves a ${N.biz} can make right now because most of your competitors have the same problem.
+
+Worth a quick conversation?`
+    });
+  }
+
+  // ── Segment 6: No social at all ──
+  if (!ig && !tt) {
+    segments.push({
+      icon: '👻', label: 'No Social Presence',
+      desc: 'No Instagram or TikTok found',
+      script: `${hey}I was researching ${N.biz}s in the area and came across ${bname}.
+
+I'll be straightforward: I couldn't find you on Instagram or TikTok. And right now, that means ${N.them} in your area don't know you exist online.
+
+Here's why that matters more than ever: the way ${N.clients} find a ${N.biz} has completely changed. They're not Googling first anymore — they're opening Instagram or TikTok, seeing a post or reel that looks good, and deciding based on that. If you're not there, you don't get considered.
+
+The businesses we work with who start from zero see the fastest results, honestly — because there's no cleanup, just growth from day one.
+
+We handle everything: account setup, content creation, local growth strategy. By month two, you'll have a real presence that's bringing in new ${N.clients}.
+
+Can I show you what that looks like for a ${N.biz} your size?`
+    });
+  }
+
+  // ── Segment 7: General (always include as fallback) ──
+  segments.push({
+    icon: '📋', label: 'General Pitch',
+    desc: 'Standard script based on score and size',
+    script: buildScript({ tier, size, bizType, name, handle, followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost, lead })
+  });
+
+  return segments;
 }
 
 function buildStatPills({ followers, engRate, avgLikes, avgComments, postsPerMonth, lastPost }) {
