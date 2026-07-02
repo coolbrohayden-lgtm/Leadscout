@@ -164,7 +164,7 @@ tr:hover td{background:var(--surface2);}
     <button class="btn" onclick="toggleAutoRefresh()" style="display:flex;align-items:center;gap:5px"><span id="refreshDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block"></span>Live</button>
     <span id="refreshBadge" style="font-size:10px;color:var(--cold);opacity:0;transition:opacity .4s"></span>
     <button class="btn" onclick="exportCSV()">Export CSV</button>
-    <button class="btn" onclick="toggleSettings()" id="settingsBtn" style="display:none"></button>
+    <button class="btn" onclick="toggleSettings()" id="settingsBtn" style="display:none">⚙️ Settings</button>
     <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">👤 Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
     <button class="btn" onclick="toggleActivityPanel()">🕘 Activity</button>
     <button class="btn btn-danger" onclick="clearDenied()">Clear Denied</button>
@@ -2004,6 +2004,7 @@ function togglePendingPanel(){
   if(lbl) lbl.textContent = uname;
   if (isAdmin()) {
     document.getElementById('pendingBtn').style.display = '';
+    document.getElementById('settingsBtn').style.display = '';
     loadPendingAccounts();
   }
   loadProfileNames();
