@@ -1079,34 +1079,42 @@ async function goToCity(){
 // ── Grid ──
 function getN(){ return parseInt(document.getElementById('gridSize').value); }
 
-// Grid is anchored to fixed world lat/lng boundaries (multiples of gridLatStep/gridLngStep
-// from the equator/prime meridian) so panning never shifts it — only zooming resizes the cells.
-let gridLatStep = null;
-let gridLngStep = null;
+// Grid is anchored to the map's world-pixel coordinate space (Leaflet's project/unproject),
+// not to the current viewport's lat/lng bounds. A given zoom level always maps to the exact
+// same world-pixel cell size, so the grid lines land in the same place every time you're at
+// that zoom — panning away and back, or zooming out and back in somewhere else, still lines up.
+let gridCellPx = null;
 
 function redrawGrid(recomputeSpacing){
   gridLayers.forEach(o => { if(!selectedBounds[o.key]) map.removeLayer(o.rect); });
   gridLayers = [];
 
-  const b = map.getBounds();
   const n = getN();
+  const zoom = map.getZoom();
 
-  if(recomputeSpacing || !gridLatStep || !gridLngStep){
-    gridLatStep = (b.getNorth() - b.getSouth()) / n;
-    gridLngStep = (b.getEast()  - b.getWest())  / n;
+  // Cell size in world-pixel units so N cells span the viewport width. This depends only
+  // on the map container's pixel width (constant regardless of pan/zoom), never on location.
+  if(recomputeSpacing || !gridCellPx){
+    gridCellPx = map.getSize().x / n;
   }
 
-  const startRow = Math.floor(b.getSouth() / gridLatStep);
-  const endRow   = Math.ceil(b.getNorth()  / gridLatStep);
-  const startCol = Math.floor(b.getWest()  / gridLngStep);
-  const endCol   = Math.ceil(b.getEast()   / gridLngStep);
+  const b = map.getBounds();
+  const nw = map.project(b.getNorthWest(), zoom);
+  const se = map.project(b.getSouthEast(), zoom);
+
+  const startCol = Math.floor(nw.x / gridCellPx);
+  const endCol   = Math.ceil(se.x / gridCellPx);
+  const startRow = Math.floor(nw.y / gridCellPx);
+  const endRow   = Math.ceil(se.y / gridCellPx);
 
   for(let r = startRow; r < endRow; r++){
     for(let c = startCol; c < endCol; c++){
-      const s  = r * gridLatStep;
-      const no = s + gridLatStep;
-      const w  = c * gridLngStep;
-      const e  = w + gridLngStep;
+      const topLeft     = map.unproject([c * gridCellPx, r * gridCellPx], zoom);
+      const bottomRight = map.unproject([(c + 1) * gridCellPx, (r + 1) * gridCellPx], zoom);
+      const s  = bottomRight.lat;
+      const no = topLeft.lat;
+      const w  = topLeft.lng;
+      const e  = bottomRight.lng;
       const key = `${s.toFixed(6)}_${w.toFixed(6)}`;
       const sel = !!selectedBounds[key];
 
