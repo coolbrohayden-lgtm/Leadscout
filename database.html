@@ -929,10 +929,15 @@ function toggleSettings(){
   document.getElementById('settingsBtn').style.background=open?'':'var(--accent)';
   document.getElementById('settingsBtn').style.color=open?'':'#fff';
 }
-document.getElementById('rapidApiKeyInput').addEventListener('input', function(){
+document.getElementById('rapidApiKeyInput').addEventListener('input', async function(){
   const key = this.value.trim();
   localStorage.setItem('leadscout_rapidapi_key', key);
+  window._rapidApiKey = key;
   window.postMessage({ __leadscout_ext: true, type: 'set_rapidapi_key', key }, '*');
+  // Admin edits sync to shared_settings — same source the scanner page uses
+  if (typeof isAdmin === 'function' && isAdmin()) {
+    await supabaseClient.from('shared_settings').update({rapid_key: key || null}).eq('id', 1);
+  }
 });
 document.getElementById('apolloKeyInput').addEventListener('input', function(){
   localStorage.setItem('leadscout_apollo_key', this.value.trim());
@@ -1089,6 +1094,12 @@ function showIgPosts(event, handle) {
     if (!posts.length) throw new Error('Keys: ' + Object.keys(json).join(', ') + ' | ' + JSON.stringify(json).slice(0,200));
     _postsCache[handle] = { posts, engagementRate: json.engagement_rate_percentages, recentExplanation: json.recent_posts_explanation };
     renderPostsPopup(handle, _postsCache[handle]);
+    // Persist to the lead so this never needs the API again (and scripts get real data)
+    const leadToUpdate = allLeads.find(l => l.instagram === handle);
+    if (leadToUpdate) {
+      leadToUpdate.ig_engagement = JSON.stringify({ posts_details: posts, engagement_rate: json.engagement_rate_percentages, recent_posts_explanation: json.recent_posts_explanation });
+      supabaseClient.from('leads').update({ ig_engagement: leadToUpdate.ig_engagement }).eq('place_id', leadToUpdate.place_id).then(({error}) => { if(error) console.warn('ig_engagement save', error); });
+    }
   }).catch(err => {
     document.getElementById('postsPopup').innerHTML = `<h4>@${handle} <span class="close-x" onclick="closePostsPopup()">✕</span></h4><div style="color:var(--hot);font-size:10px;word-break:break-all">${err.message}</div>`;
   });
@@ -2018,14 +2029,16 @@ function togglePendingPanel(){
   // Load Apollo key from localStorage
   const savedApollo = localStorage.getItem('leadscout_apollo_key');
   if(savedApollo) document.getElementById('apolloKeyInput').value = savedApollo;
-  const savedRapid = localStorage.getItem('leadscout_rapidapi_key');
-  if(savedRapid) {
-    document.getElementById('rapidApiKeyInput').value = savedRapid;
-    window.postMessage({ __leadscout_ext: true, type: 'set_rapidapi_key', key: savedRapid }, '*');
-  }
-  // Load RapidAPI key from shared_settings (same place scanner stores it)
+  // RapidAPI key: shared_settings is the source of truth (same as scanner page);
+  // localStorage is only a fallback if the shared fetch fails
   const { data: sharedSettings } = await supabaseClient.from('shared_settings').select('rapid_key').eq('id', 1).single();
-  if (sharedSettings?.rapid_key) window._rapidApiKey = sharedSettings.rapid_key;
+  const rapidKey = sharedSettings?.rapid_key || localStorage.getItem('leadscout_rapidapi_key') || '';
+  if (rapidKey) {
+    window._rapidApiKey = rapidKey;
+    localStorage.setItem('leadscout_rapidapi_key', rapidKey);
+    document.getElementById('rapidApiKeyInput').value = rapidKey;
+    window.postMessage({ __leadscout_ext: true, type: 'set_rapidapi_key', key: rapidKey }, '*');
+  }
   // Lock API key inputs to admin only
   if (!isAdmin()) {
     ['rapidApiKeyInput','apolloKeyInput','resendKeyInput','resendFromInput'].forEach(id => {
