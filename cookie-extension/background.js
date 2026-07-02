@@ -306,32 +306,65 @@ async function scanPageForSocials(url) {
       func: () => {
         const found = { instagram: null, tiktok: null, facebook: null, signals: [] };
 
-        // 1. Check all <a href> links pointing to social platforms
+        const IG_SKIP = ['p','explore','reels','stories','accounts','sharer','share','dialog','intent','hashtag'];
+        const FB_SKIP = ['sharer','share','dialog','plugins','login','photo','video','events','groups','hashtag','intent'];
+
+        function extractIg(url) {
+          if (!url) return null;
+          const m = url.match(/instagram\.com\/([A-Za-z0-9._]{2,30})/);
+          if (!m) return null;
+          const h = m[1].toLowerCase().replace(/\/$/, '');
+          return IG_SKIP.includes(h) ? null : h;
+        }
+        function extractTt(url) {
+          if (!url) return null;
+          const m = url.match(/tiktok\.com\/@?([A-Za-z0-9._]{2,30})/);
+          return m ? m[1].toLowerCase() : null;
+        }
+        function extractFb(url) {
+          if (!url) return null;
+          const m = url.match(/facebook\.com\/([A-Za-z0-9._\-]{3,60})/);
+          if (!m) return null;
+          const pg = m[1].replace(/[/?].*$/, '').toLowerCase();
+          if (/^\d+$/.test(pg) || FB_SKIP.some(s => pg.includes(s))) return null;
+          return pg;
+        }
+
+        // 1. Check all <a href> links
         document.querySelectorAll('a[href]').forEach(a => {
           const href = a.href || '';
-          const m_ig = href.match(/instagram\.com\/([A-Za-z0-9._]{2,30})/);
-          const m_tt = href.match(/tiktok\.com\/@?([A-Za-z0-9._]{2,30})/);
-          const m_fb = href.match(/facebook\.com\/([A-Za-z0-9._\-]{3,60})/);
-          if (m_ig && !found.instagram) {
-            const h = m_ig[1].toLowerCase().replace(/\/$/, '');
-            const skip = ['p','explore','reels','stories','accounts','sharer','share','dialog'];
-            if (!skip.includes(h)) { found.instagram = h; found.signals.push(`link:ig:${h}`); }
-          }
-          if (m_tt && !found.tiktok) {
-            found.tiktok = m_tt[1].toLowerCase();
-            found.signals.push(`link:tt:${found.tiktok}`);
-          }
-          if (m_fb && !found.facebook) {
-            const pg = m_fb[1].replace(/[/?].*$/, '').toLowerCase();
-            const fbSkip = ['sharer','share','dialog','plugins','login','photo','video','events','groups'];
-            if (!/^\d+$/.test(pg) && !fbSkip.some(s => pg.includes(s))) {
-              found.facebook = pg;
-              found.signals.push(`link:fb:${pg}`);
-            }
-          }
+          if (!found.instagram) { const h = extractIg(href); if (h) { found.instagram = h; found.signals.push(`link:ig:${h}`); } }
+          if (!found.tiktok)    { const h = extractTt(href); if (h) { found.tiktok = h;    found.signals.push(`link:tt:${h}`); } }
+          if (!found.facebook)  { const h = extractFb(href); if (h) { found.facebook = h;  found.signals.push(`link:fb:${h}`); } }
         });
 
-        // 2. Scan all images — src, alt, title for social platform names
+        // 2. Check onclick, data-href, data-url, data-link attributes (Yext / Uberall / similar CMS)
+        if (!found.instagram || !found.tiktok || !found.facebook) {
+          document.querySelectorAll('[onclick],[data-href],[data-url],[data-link],[data-social-url]').forEach(el => {
+            const vals = [
+              el.getAttribute('onclick') || '',
+              el.getAttribute('data-href') || '',
+              el.getAttribute('data-url') || '',
+              el.getAttribute('data-link') || '',
+              el.getAttribute('data-social-url') || '',
+            ].join(' ');
+            if (!found.instagram) { const h = extractIg(vals); if (h) { found.instagram = h; found.signals.push(`onclick:ig:${h}`); } }
+            if (!found.tiktok)    { const h = extractTt(vals); if (h) { found.tiktok = h;    found.signals.push(`onclick:tt:${h}`); } }
+            if (!found.facebook)  { const h = extractFb(vals); if (h) { found.facebook = h;  found.signals.push(`onclick:fb:${h}`); } }
+          });
+        }
+
+        // 3. Scan inline <script> tags for social URLs embedded in JSON/JS config
+        if (!found.instagram || !found.tiktok || !found.facebook) {
+          document.querySelectorAll('script:not([src])').forEach(s => {
+            const txt = s.textContent || '';
+            if (!found.instagram) { const h = extractIg(txt); if (h) { found.instagram = h; found.signals.push(`script:ig:${h}`); } }
+            if (!found.tiktok)    { const h = extractTt(txt); if (h) { found.tiktok = h;    found.signals.push(`script:tt:${h}`); } }
+            if (!found.facebook)  { const h = extractFb(txt); if (h) { found.facebook = h;  found.signals.push(`script:fb:${h}`); } }
+          });
+        }
+
+        // 4. Scan all images — src, alt, title for social platform names
         document.querySelectorAll('img').forEach(img => {
           const src = (img.src || img.dataset.src || '').toLowerCase();
           const alt = (img.alt || '').toLowerCase();
@@ -342,9 +375,7 @@ async function scanPageForSocials(url) {
           if (/facebook/.test(combined)) found.signals.push(`img:facebook:${alt||src.split('/').pop()}`);
         });
 
-        // 3. Scan SVG elements and icon font classes (Font Awesome, etc.)
-        // Use getAttribute('class') instead of el.className — SVG elements return SVGAnimatedString,
-        // not a plain string, so .toLowerCase() would throw.
+        // 5. Scan SVG elements and icon font classes (Font Awesome, etc.)
         document.querySelectorAll('[class]').forEach(el => {
           const cls = (el.getAttribute('class') || '').toLowerCase();
           if (/instagram|fa-instagram/.test(cls)) found.signals.push(`icon:instagram`);
@@ -352,7 +383,7 @@ async function scanPageForSocials(url) {
           if (/facebook|fa-facebook/.test(cls))   found.signals.push(`icon:facebook`);
         });
 
-        // 4. Scan all text content for @handle patterns near social keywords
+        // 6. Scan visible text for @handle near social keywords
         const bodyText = document.body?.innerText || '';
         const igHandle = bodyText.match(/(?:instagram|follow us)[^\n@]{0,30}@([A-Za-z0-9._]{2,30})/i);
         if (igHandle && !found.instagram) {
