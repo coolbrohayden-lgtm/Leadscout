@@ -47,6 +47,28 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .fchip.fc-denied.active{background:#444;border-color:#666;color:#aaa;}
 .sort-sel{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;outline:none;}
 
+/* View toggle (Table / Pipeline) */
+.view-toggle{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+.view-toggle button{border:none;background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;padding:5px 12px;cursor:pointer;transition:.15s;}
+.view-toggle button.active{background:var(--accent);color:#fff;}
+
+/* Pipeline (kanban) board */
+.pipeline-wrap{display:flex;gap:12px;padding:16px 20px;overflow-x:auto;align-items:flex-start;min-height:60vh;}
+.pipe-col{background:var(--surface);border:1px solid var(--border);border-radius:10px;min-width:250px;width:250px;flex-shrink:0;display:flex;flex-direction:column;max-height:78vh;}
+.pipe-col-head{padding:10px 12px;border-bottom:2px solid var(--pipe-color,var(--border));display:flex;align-items:center;gap:8px;position:sticky;top:0;background:var(--surface);border-radius:10px 10px 0 0;z-index:1;}
+.pipe-col-head .t{font-size:12px;font-weight:800;letter-spacing:.03em;}
+.pipe-col-head .n{font-size:10px;font-weight:700;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:1px 7px;color:var(--muted);margin-left:auto;}
+.pipe-col-body{padding:8px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1;min-height:80px;transition:background .15s;}
+.pipe-col-body.drag-over{background:rgba(108,99,255,.08);outline:2px dashed var(--accent);outline-offset:-4px;border-radius:0 0 10px 10px;}
+.pipe-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:grab;transition:border-color .15s, opacity .15s;}
+.pipe-card:hover{border-color:var(--accent);}
+.pipe-card.dragging{opacity:.4;cursor:grabbing;}
+.pipe-card .nm{font-size:12px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:5px;}
+.pipe-card .meta{font-size:10px;color:var(--muted);margin-bottom:5px;}
+.pipe-card .socials{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-bottom:5px;}
+.pipe-card .foot{display:flex;gap:5px;align-items:center;}
+.pipe-empty{font-size:10px;color:var(--muted);text-align:center;padding:14px 0;}
+
 /* Table */
 .table-wrap{overflow-x:auto;padding:0 20px 20px;}
 table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;}
@@ -154,6 +176,10 @@ tr:hover td{background:var(--surface2);}
 <div class="stats-bar" id="statsBar"></div>
 
 <div class="controls">
+  <div class="view-toggle">
+    <button id="viewTableBtn" class="active" onclick="setView('table')">📋 Table</button>
+    <button id="viewPipeBtn" onclick="setView('pipeline')">📊 Pipeline</button>
+  </div>
   <input class="search-box" id="searchBox" placeholder="Search by name, address, notes…" oninput="render()"/>
   <div class="filter-chips" style="margin-bottom:4px">
     <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">LABEL</span>
@@ -378,6 +404,7 @@ function render(){
   const leads=getFiltered();
   document.getElementById('countLabel').textContent=`${leads.length} result${leads.length===1?'':'s'}`;
   const c=document.getElementById('tableContainer');
+  if(currentView==='pipeline'){ renderPipeline(leads, c); return; }
   if(!leads.length){c.innerHTML='<div class="empty">No leads match this filter.</div>';return;}
   c.innerHTML=`<table>
     <thead><tr>
@@ -451,6 +478,82 @@ function render(){
     </tbody>
   </table>`;
 }
+
+// ── Pipeline (kanban) view ──
+let currentView = localStorage.getItem('leadscout_view') || 'table';
+
+function setView(v){
+  currentView = v;
+  localStorage.setItem('leadscout_view', v);
+  document.getElementById('viewTableBtn').classList.toggle('active', v==='table');
+  document.getElementById('viewPipeBtn').classList.toggle('active', v==='pipeline');
+  render();
+}
+
+const PIPE_STAGES=[
+  {id:'new',        title:'🆕 New',        color:'#7d8590'},
+  {id:'contacted',  title:'📞 Contacted',  color:'#6c63ff'},
+  {id:'interested', title:'👀 Interested', color:'#f5a623'},
+  {id:'signed',     title:'✅ Signed',     color:'#4ade80'},
+  {id:'denied',     title:'🚫 Denied',     color:'#555'},
+];
+
+function renderPipeline(leads, c){
+  c.innerHTML = `<div class="pipeline-wrap">` + PIPE_STAGES.map(st=>{
+    const cards = leads.filter(l=>(l.status||'new')===st.id);
+    return `<div class="pipe-col" style="--pipe-color:${st.color}">
+      <div class="pipe-col-head"><span class="t">${st.title}</span><span class="n">${cards.length}</span></div>
+      <div class="pipe-col-body" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')">
+        ${cards.length ? cards.map(pipeCard).join('') : '<div class="pipe-empty">Drop leads here</div>'}
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function pipeCard(l){
+  const BIZ_ICONS={restaurant:'🍽️',spa:'💆',hair_salon:'✂️',nail_salon:'💅',gym:'🏋️',yoga_studio:'🧘',dentist:'🦷',cafe:'☕',bar:'🍺',barber_shop:'💈',lodging:'🏨',car_wash:'🚗'};
+  const icon=BIZ_ICONS[l.business_type||'restaurant']||'🏢';
+  const ig=l.instagram?`<a class="pill pill-ig" href="https://instagram.com/${l.instagram}" target="_blank">${igSvg()} @${l.instagram}${l.ig_followers?` · ${fmtFollowers(l.ig_followers)}`:''}</a>`:'';
+  const tt=l.tiktok?`<a class="pill pill-tt" href="https://tiktok.com/@${l.tiktok}" target="_blank">${ttSvg()} @${l.tiktok}${l.tt_followers?` · ${fmtFollowers(l.tt_followers)}`:''}</a>`:'';
+  const label=l.label?`<span class="badge badge-${(l.label||'cold').toLowerCase()}">${l.label}</span>`:'';
+  const notes=l.notes?`<span style="font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;display:inline-block" title="${(l.notes||'').replace(/"/g,'&quot;')}">💬 ${l.notes}</span>`:'';
+  return `<div class="pipe-card" draggable="true" ondragstart="pipeDragStart(event,'${l.place_id}')" ondragend="pipeDragEnd(event)">
+    <div class="nm">${icon} ${l.name} ${l.exported_at?'<span style="color:#4ade80;font-size:10px" title="Already exported">✓</span>':''}</div>
+    <div class="meta">${label} <span style="font-weight:700;color:var(--accent)">⭐ ${l.score||0}</span>${l.phone?` · ${l.phone}`:''}</div>
+    <div class="socials">${ig}${tt}</div>
+    <div class="foot">
+      <button class="btn" style="font-size:9px;padding:2px 7px" onclick="showSalesScript('${l.place_id}')">📝 Script</button>
+      ${notes}
+    </div>
+  </div>`;
+}
+
+let _dragPlaceId=null;
+function pipeDragStart(e,id){
+  _dragPlaceId=id;
+  e.dataTransfer.effectAllowed='move';
+  e.target.classList.add('dragging');
+}
+function pipeDragEnd(e){ e.target.classList.remove('dragging'); }
+function pipeDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  e.currentTarget.classList.add('drag-over');
+}
+function pipeDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
+async function pipeDrop(e,stage){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if(!_dragPlaceId) return;
+  const lead=allLeads.find(l=>l.place_id===_dragPlaceId);
+  _dragPlaceId=null;
+  if(!lead || (lead.status||'new')===stage) return;
+  await setStatus(lead.place_id, stage);
+}
+
+// Apply stored view choice to the toggle buttons on startup
+document.getElementById('viewTableBtn').classList.toggle('active', currentView==='table');
+document.getElementById('viewPipeBtn').classList.toggle('active', currentView==='pipeline');
 
 // ── Actions ──
 async function setStatus(placeId, status){
