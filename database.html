@@ -241,6 +241,7 @@ async function dbAll(store){
 async function load(){
   allLeads = await dbAll('leads');
   blacklist = await dbAll('blacklist');
+  await migrateLocalExports();
   renderStats();
   buildLocationOptions();
   buildBizTypeChips();
@@ -410,7 +411,7 @@ function render(){
       const bizType = l.business_type || 'restaurant';
       const bizIcon = BIZ_ICONS[bizType] || '🏢';
       const bizLabel = bizType.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-      const wasExported = _exportedIds.has(l.place_id);
+      const wasExported = !!l.exported_at;
       return `<tr id="row-${l.place_id}"${wasExported?' style="opacity:0.6"':''}>
         <td>
           <div style="font-weight:600">${l.name}${wasExported?' <span title="Already exported" style="color:#4ade80;font-size:11px">✓</span>':''}</div>
@@ -552,11 +553,24 @@ function parseAddress(address){
 }
 function esc(v){ return `"${String(v||'').replace(/"/g,'""')}"`; }
 
-let _exportedIds = new Set(JSON.parse(localStorage.getItem('leadscout_exported')||'[]'));
+// Export tracking lives in Supabase (exported_at column) so it syncs across the whole team.
+async function markExported(ids){
+  const now = new Date().toISOString();
+  for(const id of ids){
+    const lead = allLeads.find(l=>l.place_id===id);
+    if(lead) lead.exported_at = now;
+  }
+  const {error} = await supabaseClient.from('leads').update({exported_at: now}).in('place_id', ids);
+  if(error) console.error('markExported', error);
+}
 
-function markExported(ids){
-  ids.forEach(id => _exportedIds.add(id));
-  localStorage.setItem('leadscout_exported', JSON.stringify([..._exportedIds]));
+// One-time migration: move any old localStorage export marks into Supabase, then clear.
+async function migrateLocalExports(){
+  const old = JSON.parse(localStorage.getItem('leadscout_exported')||'[]');
+  if(!old.length) return;
+  const unmarked = old.filter(id => { const l = allLeads.find(x=>x.place_id===id); return l && !l.exported_at; });
+  if(unmarked.length) await markExported(unmarked);
+  localStorage.removeItem('leadscout_exported');
 }
 
 function exportCSV(){
@@ -592,8 +606,7 @@ function exportCSV(){
   const ts=new Date().toISOString().slice(0,10).replace(/-/g,'');
   a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
   a.download=`leadscout_${ts}.csv`; a.click();
-  markExported(leads.map(l=>l.place_id));
-  render(); // refresh to show checkmarks
+  markExported(leads.map(l=>l.place_id)).then(()=>render()); // refresh to show checkmarks
 }
 
 // ── Settings panel ──

@@ -46,3 +46,21 @@ async function signOut() {
   await supabaseClient.auth.signOut();
   window.location.href = '/login';
 }
+
+// ── Attach Supabase session token to all same-origin API calls ──
+// The server rejects unauthenticated API requests, so every fetch to a
+// relative path (/nearbysearch, /fetchpage, /scrape-email, ...) needs the token.
+const _origFetch = window.fetch.bind(window);
+window.fetch = async function(input, init) {
+  try {
+    const u = typeof input === 'string' ? input : (input && input.url) || '';
+    if (u.startsWith('/') && !u.startsWith('//')) {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session && session.access_token) {
+        init = init || {};
+        init.headers = { ...(init.headers || {}), 'Authorization': `Bearer ${session.access_token}` };
+      }
+    }
+  } catch (e) {}
+  return _origFetch(input, init);
+};

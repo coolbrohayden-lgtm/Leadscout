@@ -11,6 +11,41 @@ const url = require('url');
 const PORT = process.env.PORT || 3000;
 const HTML_FILE = path.join(__dirname, 'restaurant_lead_finder.html');
 
+// ── Supabase token verification (protects API routes from public abuse) ──
+const SUPA_URL = 'https://yiutqeuiwdrfiwioyhwr.supabase.co';
+const SUPA_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpdXRxZXVpd2RyZml3aW95aHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNzU3NDgsImV4cCI6MjA5Nzg1MTc0OH0.TlIwAggWacEj1ZutusH-gaMa2LSt_ZAjov-2Ao3LHlo';
+const _tokenCache = new Map(); // token -> cache expiry (ms)
+
+function verifySupaToken(token) {
+  return new Promise((resolve) => {
+    if (!token) return resolve(false);
+    const hit = _tokenCache.get(token);
+    if (hit && hit > Date.now()) return resolve(true);
+    const u = new URL(SUPA_URL + '/auth/v1/user');
+    const req = https.request({
+      hostname: u.hostname, path: u.pathname, method: 'GET',
+      headers: { 'apikey': SUPA_ANON_KEY, 'Authorization': `Bearer ${token}` }
+    }, (r) => {
+      let data = '';
+      r.on('data', c => data += c);
+      r.on('end', () => {
+        try {
+          const j = JSON.parse(data);
+          if (j && j.id) {
+            if (_tokenCache.size > 500) _tokenCache.clear();
+            _tokenCache.set(token, Date.now() + 5 * 60 * 1000);
+            return resolve(true);
+          }
+        } catch(e) {}
+        resolve(false);
+      });
+    });
+    req.on('error', () => resolve(false));
+    req.setTimeout(8000, () => { req.destroy(); resolve(false); });
+    req.end();
+  });
+}
+
 function fetchPageDirect(pageUrl, redirects=0, extraHeaders={}, debug=false) {
   return new Promise((resolve, reject) => {
     if (redirects > 5) return reject(new Error('Too many redirects'));
@@ -143,7 +178,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+  const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+
+  // CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, CORS);
+    res.end();
+    return;
+  }
+
+  // All routes below are API — require a valid Supabase session token
+  const authToken = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+  if (!(await verifySupaToken(authToken))) {
+    res.writeHead(401, CORS);
+    res.end(JSON.stringify({ error: 'unauthorized — sign in required' }));
+    return;
+  }
 
   // NEW: Nearby search using Places API (New)
   if (parsed.pathname === '/nearbysearch') {

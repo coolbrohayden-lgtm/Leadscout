@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    width: 260px;
+    padding: 16px;
+    background: #0f0f0f;
+    color: #e0e0e0;
+    margin: 0;
+  }
+  h2 {
+    margin: 0 0 14px;
+    font-size: 15px;
+    color: #fff;
+    letter-spacing: 0.3px;
+  }
+  h2 span { color: #4af; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .label {
+    font-size: 12px;
+    color: #888;
+    width: 32px;
+    flex-shrink: 0;
+  }
+  .status {
+    font-size: 12px;
+    flex: 1;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #ccc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .status.ok { color: #4c4; border-color: #2a4a2a; background: #0d200d; }
+  .status.err { color: #c44; border-color: #4a2a2a; background: #200d0d; }
+  .status.warn { color: #ca4; border-color: #4a3a2a; background: #201a0d; }
+  button {
+    width: 100%;
+    margin-top: 10px;
+    padding: 9px;
+    background: #4af;
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.2px;
+  }
+  button:hover { background: #6cf; }
+  button:disabled { background: #333; color: #666; cursor: default; }
+  .msg {
+    margin-top: 10px;
+    font-size: 12px;
+    text-align: center;
+    min-height: 16px;
+    color: #888;
+  }
+  .msg.ok { color: #4c4; }
+  .msg.err { color: #c44; }
+</style>
+</head>
+<body>
+<h2>Lead<span>Scout</span> Cookie Sync</h2>
+
+<div class="row">
+  <span class="label">IG</span>
+  <span class="status" id="igStatus">checking...</span>
+</div>
+<div class="row">
+  <span class="label">TT</span>
+  <span class="status" id="ttStatus">checking...</span>
+</div>
+
+<button id="syncBtn" disabled>Sync to LeadScout</button>
+<div class="msg" id="msg"></div>
+
+
+<script src="popup.js"></script>
+</body>
+</html>
