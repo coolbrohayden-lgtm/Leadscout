@@ -303,8 +303,27 @@ tr:hover td{background:var(--surface2);}
 <script>
 let allLeads = [];
 let blacklist = [];
-let activeFilter = 'all';
-let activeBizFilter = 'all';
+let activeFilters = new Set();    // empty = 'all' (no restriction)
+let activeBizFilters = new Set(); // empty = 'all' (no restriction) — types combine with OR
+
+// Pairs of filters that can never both be true for the same lead —
+// selecting one auto-removes the other if it's active.
+const CONFLICT_PAIRS = [
+  ['HOT','WARM'],['HOT','COLD'],['WARM','COLD'],
+  ['new','contacted'],['new','interested'],['new','signed'],['new','denied'],
+  ['contacted','interested'],['contacted','signed'],['contacted','denied'],
+  ['interested','signed'],['interested','denied'],
+  ['signed','denied'],
+  ['no_ig','has_ig'],['no_ig','ig_small'],['no_ig','ig_mid'],
+  ['ig_small','ig_mid'],
+  ['no_tt','has_tt'],
+  ['no_social','has_ig'],['no_social','ig_small'],['no_social','ig_mid'],['no_social','has_tt'],
+];
+const FILTER_CONFLICTS = {};
+CONFLICT_PAIRS.forEach(([a,b])=>{
+  (FILTER_CONFLICTS[a] = FILTER_CONFLICTS[a]||new Set()).add(b);
+  (FILTER_CONFLICTS[b] = FILTER_CONFLICTS[b]||new Set()).add(a);
+});
 
 // ── Supabase helpers ──
 async function dbPut(store, val){
@@ -360,15 +379,17 @@ function buildBizTypeChips(){
   };
   const chips = types.map(t => {
     const label = BIZ_LABELS[t] || t.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-    return `<button class="fchip${activeBizFilter===t?' active':''}" onclick="setBizFilter('${t}')">${label}</button>`;
+    return `<button class="fchip${activeBizFilters.has(t)?' active':''}" onclick="setBizFilter('${t}')">${label}</button>`;
   }).join('');
   row.innerHTML = `<span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">TYPE</span>
-    <button class="fchip${activeBizFilter==='all'?' active':''}" onclick="setBizFilter('all')">All Types</button>${chips}`;
+    <button class="fchip${activeBizFilters.size===0?' active':''}" onclick="setBizFilter('all')">All Types</button>${chips}`;
   row.style.display = types.length > 0 ? 'flex' : 'none';
 }
 
 function setBizFilter(type) {
-  activeBizFilter = type;
+  if(type==='all'){ activeBizFilters.clear(); }
+  else if(activeBizFilters.has(type)){ activeBizFilters.delete(type); }
+  else { activeBizFilters.add(type); }
   buildBizTypeChips();
   render();
 }
@@ -383,9 +404,51 @@ function buildLocationOptions(){
 
 // ── Filter + Sort + Search ──
 function setFilter(f){
-  activeFilter=f;
-  document.querySelectorAll('.fchip').forEach(b=>b.classList.toggle('active',b.dataset.f===f));
+  if(f==='all'){
+    activeFilters.clear();
+    refreshFilterChipUI();
+    render();
+    return;
+  }
+  if(activeFilters.has(f)){
+    activeFilters.delete(f);
+  } else {
+    const conflicts = FILTER_CONFLICTS[f];
+    const removed = [];
+    if(conflicts){
+      conflicts.forEach(c => { if(activeFilters.has(c)){ activeFilters.delete(c); removed.push(c); } });
+    }
+    activeFilters.add(f);
+    if(removed.length) showToast(`Removed ${removed.join(', ')} — can't combine with ${f}`);
+  }
+  refreshFilterChipUI();
   render();
+}
+
+function refreshFilterChipUI(){
+  document.querySelectorAll('.filter-chips .fchip[data-f]').forEach(b=>{
+    const f = b.dataset.f;
+    b.classList.toggle('active', f==='all' ? activeFilters.size===0 : activeFilters.has(f));
+  });
+}
+
+function leadPassesFilter(l, f){
+  switch(f){
+    case 'HOT': case 'WARM': case 'COLD': return l.label===f;
+    case 'new': return !l.status || l.status==='new';
+    case 'contacted': case 'interested': case 'signed': case 'denied': return l.status===f;
+    case 'no_ig': return !l.instagram;
+    case 'has_ig': return !!l.instagram;
+    case 'ig_small': return !!l.instagram && (l.ig_followers||0)<1000;
+    case 'ig_mid': return !!l.instagram && (l.ig_followers||0)>=1000 && (l.ig_followers||0)<10000;
+    case 'no_tt': return !l.tiktok;
+    case 'has_tt': return !!l.tiktok;
+    case 'no_social': return !l.instagram && !l.tiktok && !l.facebook;
+    case 'no_website': return !l.website;
+    case 'has_phone': return !!l.phone;
+    case 'mine': return l.assigned_to===_myName;
+    default: return true;
+  }
 }
 
 function getFiltered(){
@@ -394,21 +457,8 @@ function getFiltered(){
   const sortVal=document.getElementById('sortSel')?.value||'score_desc';
   const minScore=parseInt(document.getElementById('minScoreSel')?.value||'0');
   let leads=allLeads.filter(l=>{
-    if(activeBizFilter !== 'all'){ if((l.business_type||'restaurant') !== activeBizFilter) return false; }
-    if(activeFilter==='all') {}
-    else if(activeFilter==='HOT'||activeFilter==='WARM'||activeFilter==='COLD'){ if(l.label!==activeFilter) return false; }
-    else if(activeFilter==='new'){ if(l.status && l.status!=='new') return false; }
-    else if(activeFilter==='no_ig'){ if(l.instagram) return false; }
-    else if(activeFilter==='has_ig'){ if(!l.instagram) return false; }
-    else if(activeFilter==='ig_small'){ if(!l.instagram || (l.ig_followers||0)>=1000) return false; }
-    else if(activeFilter==='ig_mid'){ if(!l.instagram || (l.ig_followers||0)<1000 || (l.ig_followers||0)>=10000) return false; }
-    else if(activeFilter==='no_tt'){ if(l.tiktok) return false; }
-    else if(activeFilter==='has_tt'){ if(!l.tiktok) return false; }
-    else if(activeFilter==='no_social'){ if(l.instagram||l.tiktok||l.facebook) return false; }
-    else if(activeFilter==='no_website'){ if(l.website) return false; }
-    else if(activeFilter==='has_phone'){ if(!l.phone) return false; }
-    else if(activeFilter==='mine'){ if(l.assigned_to!==_myName) return false; }
-    else { if(l.status!==activeFilter) return false; }
+    if(activeBizFilters.size){ if(!activeBizFilters.has(l.business_type||'restaurant')) return false; }
+    for(const f of activeFilters){ if(!leadPassesFilter(l, f)) return false; }
     if(minScore && (l.score||0)<minScore) return false;
     if(locFilter && !(l.address||'').toLowerCase().includes(locFilter)) return false;
     if(q){
