@@ -769,7 +769,7 @@ select { background: var(--surface2); border: 1px solid var(--border); border-ra
       <h3>Grid settings</h3>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
         <span style="font-size:11px;color:var(--muted)">Size</span>
-        <select id="gridSize" onchange="redrawGrid()">
+        <select id="gridSize" onchange="redrawGrid(true)">
           <option value="3">3 × 3</option>
           <option value="4" selected>4 × 4</option>
           <option value="6">6 × 6</option>
@@ -1003,8 +1003,9 @@ function extFetch(type, handle, name, city, url, bizType) {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'© OpenStreetMap contributors', maxZoom:19
   }).addTo(map);
-  map.on('moveend zoomend', redrawGrid);
-  redrawGrid();
+  map.on('moveend', () => redrawGrid(false));
+  map.on('zoomend', () => redrawGrid(true));
+  redrawGrid(true);
   // Load shared keys (google + rapid) from Supabase
   const {data: sharedSettings} = await supabaseClient.from('shared_settings').select('*').eq('id',1).single();
   if(sharedSettings?.google_key) document.getElementById('apiKeyInput').value = sharedSettings.google_key;
@@ -1078,21 +1079,34 @@ async function goToCity(){
 // ── Grid ──
 function getN(){ return parseInt(document.getElementById('gridSize').value); }
 
-function redrawGrid(){
+// Grid is anchored to fixed world lat/lng boundaries (multiples of gridLatStep/gridLngStep
+// from the equator/prime meridian) so panning never shifts it — only zooming resizes the cells.
+let gridLatStep = null;
+let gridLngStep = null;
+
+function redrawGrid(recomputeSpacing){
   gridLayers.forEach(o => { if(!selectedBounds[o.key]) map.removeLayer(o.rect); });
   gridLayers = [];
 
   const b = map.getBounds();
   const n = getN();
-  const latStep = (b.getNorth() - b.getSouth()) / n;
-  const lngStep = (b.getEast()  - b.getWest())  / n;
 
-  for(let r = 0; r < n; r++){
-    for(let c = 0; c < n; c++){
-      const s  = b.getSouth() + r * latStep;
-      const no = s + latStep;
-      const w  = b.getWest()  + c * lngStep;
-      const e  = w + lngStep;
+  if(recomputeSpacing || !gridLatStep || !gridLngStep){
+    gridLatStep = (b.getNorth() - b.getSouth()) / n;
+    gridLngStep = (b.getEast()  - b.getWest())  / n;
+  }
+
+  const startRow = Math.floor(b.getSouth() / gridLatStep);
+  const endRow   = Math.ceil(b.getNorth()  / gridLatStep);
+  const startCol = Math.floor(b.getWest()  / gridLngStep);
+  const endCol   = Math.ceil(b.getEast()   / gridLngStep);
+
+  for(let r = startRow; r < endRow; r++){
+    for(let c = startCol; c < endCol; c++){
+      const s  = r * gridLatStep;
+      const no = s + gridLatStep;
+      const w  = c * gridLngStep;
+      const e  = w + gridLngStep;
       const key = `${s.toFixed(6)}_${w.toFixed(6)}`;
       const sel = !!selectedBounds[key];
 
