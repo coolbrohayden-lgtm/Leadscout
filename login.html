@@ -94,11 +94,11 @@ async function signUp(){
   btn.disabled=true; btn.textContent='Creating account…';
   const {data, error} = await sb.auth.signUp({email, password:pass, options:{data:{name}}});
   if(error){err.textContent=error.message; btn.disabled=false; btn.textContent='Create Account'; return;}
-  // Insert user profile
+  // Insert user profile — new accounts start unapproved and need admin sign-off
   if(data.user){
-    await sb.from('user_profiles').upsert({id:data.user.id, name});
+    await sb.from('user_profiles').upsert({id:data.user.id, name, approved:false});
   }
-  ok.textContent='Account created! Check your email to confirm, then sign in.';
+  ok.textContent='Account created! Check your email to confirm. An admin also needs to approve your account before you can sign in.';
   btn.disabled=false; btn.textContent='Create Account';
 }
 

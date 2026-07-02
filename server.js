@@ -154,6 +154,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve pending-approval page
+  if (parsed.pathname === '/pending') {
+    try {
+      const html = fs.readFileSync(path.join(__dirname, 'pending.html'), 'utf8');
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.end(html);
+    } catch(e) {
+      res.writeHead(404); res.end('pending.html not found.');
+    }
+    return;
+  }
+
   // Serve auth.js
   if (parsed.pathname === '/auth.js') {
     try {

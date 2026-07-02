@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LeadScout — Pending Approval</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0f1117;--surface:#161b22;--surface2:#1c2230;--border:#2a3040;
+  --text:#e6edf3;--muted:#7d8590;--accent:#6c63ff;--warm:#f5a623;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px 40px;width:100%;max-width:380px;text-align:center;}
+.logo{font-size:20px;font-weight:700;margin-bottom:20px;}
+.logo span{color:var(--accent);}
+.icon{font-size:36px;margin-bottom:14px;}
+h1{font-size:16px;margin-bottom:10px;}
+p{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;}
+.btn{padding:9px 18px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);}
+.btn:hover{opacity:.8;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Lead<span>Scout</span></div>
+  <div class="icon">⏳</div>
+  <h1>Waiting on approval</h1>
+  <p>Your account has been created, but an admin needs to approve it before you can sign in. Check back soon, or reach out to whoever invited you.</p>
+  <button class="btn" onclick="signOutAndGoLogin()">Sign Out</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/auth.js"></script>
+<script>
+async function signOutAndGoLogin(){
+  await supabaseClient.auth.signOut();
+  window.location.href = '/login';
+}
+// If not signed in at all, bounce to login. If already approved, go to app.
+(async () => {
+  const user = await getCurrentUser();
+  if (!user) { window.location.href = '/login'; return; }
+  if (user.email === ADMIN_EMAIL) { window.location.href = '/'; return; }
+  const { data: profile } = await supabaseClient.from('user_profiles').select('approved').eq('id', user.id).single();
+  if (profile && profile.approved === true) window.location.href = '/';
+})();
+</script>
+</body>
+</html>

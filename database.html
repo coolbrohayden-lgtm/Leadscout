@@ -135,6 +135,7 @@ tr:hover td{background:var(--surface2);}
     <span id="refreshBadge" style="font-size:10px;color:var(--cold);opacity:0;transition:opacity .4s"></span>
     <button class="btn" onclick="exportCSV()">Export CSV</button>
     <button class="btn" onclick="toggleSettings()" id="settingsBtn" style="display:none"></button>
+    <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">👤 Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
     <button class="btn btn-danger" onclick="clearDenied()">Clear Denied</button>
     <button class="btn btn-danger" onclick="clearAll()">🗑 Clear All</button>
   </div>
@@ -144,6 +145,10 @@ tr:hover td{background:var(--surface2);}
   <div id="settingsPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);gap:16px;flex-wrap:wrap;align-items:center">
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Apollo.io API Key (for owner lookup)<input id="apolloKeyInput" type="password" placeholder="Apollo API key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">RapidAPI Key (IG fallback)<input id="rapidApiKeyInput" type="password" placeholder="RapidAPI key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
+  </div>
+  <div id="pendingPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-direction:column;gap:8px">
+    <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Accounts awaiting approval</div>
+    <div id="pendingList" style="display:flex;flex-direction:column;gap:6px"></div>
   </div>
 
 <div class="stats-bar" id="statsBar"></div>
@@ -1574,6 +1579,47 @@ function toggleAutoRefresh() {
   _autoRefreshTimer ? stopAutoRefresh() : startAutoRefresh();
 }
 
+// ── Pending account approvals (admin only) ──
+async function loadPendingAccounts(){
+  const { data, error } = await supabaseClient.from('user_profiles').select('id,name,approved').eq('approved', false);
+  if(error){ console.error('loadPendingAccounts', error); return; }
+  const list = document.getElementById('pendingList');
+  const countEl = document.getElementById('pendingCount');
+  if(!data || !data.length){
+    list.innerHTML = `<div style="font-size:11px;color:var(--muted)">No pending accounts.</div>`;
+    countEl.style.display = 'none';
+    return;
+  }
+  countEl.textContent = data.length;
+  countEl.style.display = 'inline-block';
+  list.innerHTML = data.map(p => `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px">
+      <span style="font-size:12px;flex:1">${p.name || '(no name)'}</span>
+      <button class="btn btn-p" style="font-size:10px;padding:3px 10px" onclick="approveAccount('${p.id}')">✓ Approve</button>
+      <button class="btn btn-danger" style="font-size:10px;padding:3px 10px" onclick="denyAccount('${p.id}')">✕ Deny</button>
+    </div>
+  `).join('');
+}
+
+async function approveAccount(userId){
+  const { error } = await supabaseClient.from('user_profiles').update({ approved: true }).eq('id', userId);
+  if(error){ console.error('approveAccount', error); return; }
+  await loadPendingAccounts();
+}
+
+async function denyAccount(userId){
+  if(!confirm('Deny this account? They will remain unapproved and unable to sign in.')) return;
+  // Leave approved=false; admin can delete the auth user manually from Supabase if needed.
+  await loadPendingAccounts();
+}
+
+function togglePendingPanel(){
+  const p = document.getElementById('pendingPanel');
+  const open = p.style.display === 'flex';
+  p.style.display = open ? 'none' : 'flex';
+  if(!open) loadPendingAccounts();
+}
+
 // ── Init ──
 (async () => {
   const user = await requireAuth();
@@ -1581,6 +1627,10 @@ function toggleAutoRefresh() {
   const uname = await getUserName();
   const lbl = document.getElementById('userLabel');
   if(lbl) lbl.textContent = uname;
+  if (isAdmin()) {
+    document.getElementById('pendingBtn').style.display = '';
+    loadPendingAccounts();
+  }
   // Load Apollo key from localStorage
   const savedApollo = localStorage.getItem('leadscout_apollo_key');
   if(savedApollo) document.getElementById('apolloKeyInput').value = savedApollo;
