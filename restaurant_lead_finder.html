@@ -1238,18 +1238,15 @@ function togglePopLayer(){
       { attribution:'© CartoDB', maxZoom:19, subdomains:'abcd' }
     ).addTo(map);
 
-    // 2. Real population density tiles — SEDAC Gridded Population of the World v4
-    _popWms = L.tileLayer.wms(
-      'https://sedac.ciesin.columbia.edu/geoserver/gpw-v4/wms',
-      {
-        layers:      'gpw-v4:gpw-v4-population-density_2020',
-        format:      'image/png',
-        transparent: true,
-        opacity:     0.85,
-        version:     '1.1.1',
-        attribution: 'SEDAC GPW v4 · Columbia/NASA'
-      }
-    ).addTo(map);
+    // 2. Real population density tiles — proxied through Railway to avoid CORS
+    _popWms = L.tileLayer.wms('/pop-tile', {
+      layers:      'gpw-v4:gpw-v4-population-density_2020',
+      format:      'image/png',
+      transparent: true,
+      opacity:     0.85,
+      version:     '1.1.1',
+      attribution: 'SEDAC GPW v4 · Columbia/NASA'
+    }).addTo(map);
 
     // 3. Labels layer on top so city names stay readable
     _popLabels = L.tileLayer(
