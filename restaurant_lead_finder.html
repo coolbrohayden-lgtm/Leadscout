@@ -1028,14 +1028,13 @@ function extFetch(type, handle, name, city, url, bizType) {
   const lbl = document.getElementById('userLabel');
   if(lbl) lbl.textContent = uname;
   map = L.map('map').setView([30.3322,-81.6557],12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  window._osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'© OpenStreetMap contributors', maxZoom:19
   }).addTo(map);
   map.on('moveend', () => redrawGrid(false));
   map.on('zoomend', () => redrawGrid(true));
   redrawGrid(true);
   buildMetroList();
-  togglePopLayer();
   // Load shared keys (google + rapid) from Supabase
   const {data: sharedSettings} = await supabaseClient.from('shared_settings').select('*').eq('id',1).single();
   if(sharedSettings?.google_key) document.getElementById('apiKeyInput').value = sharedSettings.google_key;
@@ -1208,213 +1207,56 @@ function selectAllVisible(){
 }
 
 // ── Population density overlay ──
-// [lat, lng, pop_thousands] — real metro-area populations
-const POP_DATA = [
-  // New York metro
-  [40.713,-74.006,8336],[40.650,-73.950,2560],[40.828,-73.865,1472],[40.728,-73.795,2253],
-  [40.619,-74.150,500],[40.735,-74.172,281],[40.718,-74.043,292],[40.758,-73.979,1600],
-  [40.908,-73.780,350],[40.752,-73.741,350],[40.683,-73.944,400],[40.758,-73.830,380],
-  // Los Angeles metro
-  [34.052,-118.244,3979],[34.148,-118.145,800],[33.943,-118.408,466],[34.020,-118.491,91],
-  [33.812,-117.919,350],[33.685,-117.827,307],[34.108,-117.290,215],[33.953,-117.396,314],
-  [33.770,-118.194,467],[34.063,-118.359,200],[33.846,-118.040,200],[34.200,-118.174,200],
-  // Chicago metro
-  [41.878,-87.630,2696],[41.948,-87.655,800],[41.833,-87.732,700],[41.748,-87.713,600],
-  [42.033,-87.683,400],[41.891,-87.821,300],[41.980,-87.914,300],[42.151,-87.843,300],
-  // Houston metro
-  [29.760,-95.370,2304],[29.761,-95.533,200],[29.986,-95.336,200],[29.668,-95.293,200],
-  [29.785,-95.824,200],[29.714,-95.402,300],[29.870,-95.393,150],[29.548,-95.098,150],
-  // Phoenix metro
-  [33.448,-112.074,1608],[33.494,-111.926,255],[33.415,-111.831,200],[33.586,-112.246,200],
-  [33.579,-111.935,200],[33.527,-112.073,200],[33.308,-111.841,200],[33.435,-112.352,150],
-  // Dallas-Fort Worth metro
-  [32.777,-96.797,1345],[32.735,-97.108,918],[32.957,-97.288,200],[33.020,-96.699,300],
-  [33.199,-97.133,200],[32.834,-96.971,200],[32.641,-97.228,200],[33.116,-97.065,150],
-  // San Antonio
-  [29.424,-98.494,1434],[29.479,-98.398,200],[29.350,-98.497,150],[29.557,-98.388,150],
-  // San Diego metro
-  [32.716,-117.161,1386],[32.737,-117.026,250],[32.648,-117.085,200],[33.157,-117.350,200],
-  [32.792,-116.962,180],[32.887,-117.241,200],[32.963,-117.198,150],[33.019,-117.128,150],
-  // Austin
-  [30.267,-97.743,978],[30.520,-97.820,150],[30.501,-97.660,150],[30.220,-97.780,100],
-  // Miami-Dade metro
-  [25.762,-80.192,441],[25.900,-80.187,300],[25.858,-80.278,450],[26.110,-80.249,180],
-  [25.975,-80.145,200],[25.928,-80.319,180],[25.793,-80.347,180],[25.666,-80.430,150],
-  [26.012,-80.337,120],[25.685,-80.478,100],[25.613,-80.565,80],
-  // Fort Lauderdale/Broward
-  [26.122,-80.137,182],[26.148,-80.271,200],[26.027,-80.266,200],[26.233,-80.143,80],
-  [26.190,-80.191,130],[26.272,-80.218,80],[26.163,-80.126,80],
-  // Palm Beach
-  [26.715,-80.053,111],[26.688,-80.064,200],[26.368,-80.073,80],[27.050,-80.109,60],
-  // Orlando metro
-  [28.538,-81.379,307],[28.419,-81.299,200],[28.756,-81.351,150],[28.671,-81.207,150],
-  [28.303,-81.418,150],[28.457,-81.465,100],[28.194,-81.509,80],[28.834,-81.644,80],
-  // Tampa metro
-  [27.951,-82.457,400],[27.768,-82.680,265],[28.053,-82.412,180],[27.888,-82.327,180],
-  [28.001,-82.757,80],[28.325,-82.688,80],[27.917,-82.786,60],[27.490,-82.433,80],
-  // Jacksonville
-  [30.332,-81.656,949],[30.487,-81.697,100],[30.235,-81.558,100],
-  // West Palm / Boca / Delray
-  [26.453,-80.073,97],[26.273,-80.269,97],[26.461,-80.136,80],
-  // Naples / Fort Myers
-  [26.142,-81.795,22],[26.640,-81.872,77],[26.519,-81.956,80],[26.353,-81.798,60],
-  // Sarasota / Bradenton
-  [27.336,-82.531,58],[27.499,-82.574,58],[27.204,-82.452,50],
-  // Boston metro
-  [42.360,-71.059,675],[42.258,-71.002,400],[42.354,-71.151,400],[42.491,-71.178,150],
-  [42.389,-71.100,250],[42.402,-71.252,200],[42.493,-70.922,100],[42.298,-71.335,150],
-  // Washington DC metro
-  [38.895,-77.036,705],[38.904,-77.017,200],[38.981,-77.097,200],[39.114,-77.156,200],
-  [38.807,-77.047,200],[38.900,-77.261,200],[38.800,-77.189,200],[39.024,-77.501,150],
-  // Philadelphia metro
-  [39.953,-75.165,1584],[40.011,-75.128,300],[39.955,-75.020,200],[39.869,-75.232,200],
-  [40.028,-75.251,200],[40.127,-75.007,150],[39.776,-75.358,150],
-  // Atlanta metro
-  [33.749,-84.388,498],[33.887,-84.432,300],[33.952,-84.550,200],[33.637,-84.429,200],
-  [33.859,-84.214,200],[33.982,-84.217,150],[33.658,-84.220,150],[34.049,-84.361,150],
-  // Seattle metro
-  [47.606,-122.332,737],[47.681,-122.120,200],[47.530,-122.037,200],[47.978,-122.201,200],
-  [47.753,-122.341,150],[47.387,-121.996,150],[47.854,-122.002,100],
-  // Minneapolis metro
-  [44.978,-93.265,429],[44.952,-93.093,400],[44.830,-93.157,150],[45.047,-93.470,150],
-  [45.019,-93.150,150],[44.898,-93.021,130],[44.980,-93.380,130],
-  // Denver metro
-  [39.739,-104.990,715],[39.914,-105.017,150],[39.647,-104.988,150],[39.774,-104.876,150],
-  [39.752,-105.223,120],[39.870,-104.982,100],[39.615,-105.017,100],
-  // San Francisco Bay Area
-  [37.775,-122.419,874],[37.804,-122.271,432],[37.339,-121.894,1026],[37.688,-122.470,150],
-  [37.541,-122.059,200],[37.682,-122.117,200],[37.885,-122.065,120],[37.371,-122.037,80],
-  [37.962,-122.347,120],[38.004,-122.256,100],[38.100,-122.573,80],
-  // Las Vegas metro
-  [36.170,-115.140,641],[36.080,-115.152,200],[36.095,-115.260,200],[36.211,-115.239,200],
-  [36.271,-115.241,100],[36.029,-115.014,80],
-  // Portland OR metro
-  [45.523,-122.677,652],[45.518,-122.480,200],[45.429,-122.841,200],[45.691,-122.660,150],
-  [45.523,-122.900,100],[45.419,-122.590,100],
-  // Charlotte metro
-  [35.227,-80.843,874],[35.095,-80.847,200],[35.328,-80.793,150],[35.388,-80.690,100],
-  [35.151,-80.789,100],[35.277,-81.187,80],
-  // Nashville metro
-  [36.163,-86.782,689],[36.166,-86.575,200],[36.024,-86.781,150],[36.290,-86.637,100],
-  [36.085,-86.956,80],
-  // St. Louis metro
-  [38.627,-90.199,301],[38.791,-90.313,300],[38.576,-90.340,200],[38.747,-90.137,150],
-  // Pittsburgh
-  [40.441,-79.996,302],[40.373,-79.891,200],[40.534,-79.960,150],
-  // Cincinnati
-  [39.103,-84.512,309],[39.189,-84.376,200],[38.971,-84.568,150],[39.019,-84.381,150],
-  // Kansas City
-  [39.100,-94.579,508],[39.020,-94.664,200],[39.228,-94.577,200],[38.883,-94.820,150],
-  // Columbus OH
-  [39.961,-82.999,905],[39.980,-82.860,200],[40.075,-82.928,150],[39.934,-82.843,150],
-  // Indianapolis
-  [39.768,-86.158,887],[39.887,-86.044,200],[39.643,-86.059,150],[39.804,-86.250,150],
-  // Memphis
-  [35.150,-90.049,633],[35.234,-90.176,200],[35.067,-89.991,150],
-  // New Orleans
-  [30.022,-90.105,383],[30.122,-90.001,200],[30.207,-90.201,150],[29.965,-90.145,150],
-  // Salt Lake City metro
-  [40.761,-111.891,200],[40.660,-111.903,150],[40.768,-111.888,400],[40.889,-111.879,150],
-  [41.226,-111.974,80],[40.228,-111.687,80],
-  // San Jose / Silicon Valley
-  [37.339,-121.894,1026],[37.304,-121.952,120],[37.407,-122.015,80],
-  // Raleigh-Durham NC
-  [35.780,-78.638,467],[35.994,-78.899,278],[35.879,-79.000,200],[35.908,-79.055,100],
-  // Virginia Beach / Norfolk
-  [36.853,-75.978,459],[36.847,-76.286,242],[36.734,-76.304,200],[36.728,-76.586,100],
-  // Richmond VA
-  [37.541,-77.434,226],[37.604,-77.376,150],[37.441,-77.427,100],
-  // Louisville KY
-  [38.253,-85.759,633],[38.165,-85.645,200],[38.318,-85.683,150],
-  // Hartford CT
-  [41.763,-72.685,124],[41.831,-72.873,100],[41.769,-72.529,80],
-  // Oklahoma City
-  [35.468,-97.516,681],[35.653,-97.479,150],[35.338,-97.487,80],
-  // Birmingham AL
-  [33.521,-86.802,212],[33.459,-86.876,200],[33.569,-86.753,150],
-  // Rochester NY
-  [43.161,-77.611,211],[43.048,-76.147,142],[43.157,-77.616,100],
-  // Buffalo NY
-  [42.886,-78.878,258],[42.900,-78.767,150],[42.827,-78.847,100],
-  // Tucson AZ
-  [32.222,-110.975,542],[32.415,-110.947,100],[32.161,-110.869,80],
-  // Fresno CA
-  [36.738,-119.787,542],[36.601,-119.863,80],[36.778,-119.718,80],
-  // Sacramento CA
-  [38.582,-121.494,513],[38.677,-121.769,200],[38.714,-121.288,150],[38.456,-121.370,80],
-  // Riverside-San Bernardino CA
-  [33.953,-117.396,314],[34.108,-117.290,215],[33.836,-117.915,200],[34.067,-117.181,80],
-];
+// Swaps the entire basemap to a real population density tile service.
+// Uses SEDAC GPW v4 (Columbia Univ / NASA) — actual census-based density raster.
+// Dark CartoDB base + population WMS + labels layer on top for readability.
 
-// Convert population (thousands) to geographic radius in pixels at current zoom/lat
-function popToPixelRadius(popThousands, lat, zoom) {
-  // Rough geographic radius: assume ~2000 people/sq mile in urban density
-  const radiusMiles = Math.sqrt(popThousands / Math.PI / 2);
-  const metersPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
-  return (radiusMiles * 1609.34) / metersPerPx;
-}
-
-let popLayer = null;
 let popLayerOn = false;
-
-function buildPopLayer(){
-  const CanvasHeat = L.Layer.extend({
-    onAdd(map){
-      this._map = map;
-      this._canvas = document.createElement('canvas');
-      this._canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:450;';
-      map.getContainer().appendChild(this._canvas);
-      map.on('move zoom resize', this._draw, this);
-      this._draw();
-    },
-    onRemove(map){
-      map.getContainer().removeChild(this._canvas);
-      map.off('move zoom resize', this._draw, this);
-    },
-    _draw(){
-      const map = this._map;
-      const sz = map.getSize();
-      const c = this._canvas;
-      c.width = sz.x; c.height = sz.y;
-      const ctx = c.getContext('2d');
-      ctx.clearRect(0,0,sz.x,sz.y);
-      // Additive blending — overlapping areas stack, making dense regions brighter
-      ctx.globalCompositeOperation = 'lighter';
-      const zoom = map.getZoom();
-      POP_DATA.forEach(([lat,lng,popK])=>{
-        const p = map.latLngToContainerPoint([lat,lng]);
-        const r = Math.max(8, Math.min(800, popToPixelRadius(popK, lat, zoom)));
-        // Skip if center is way off screen
-        if(p.x < -r || p.x > sz.x+r || p.y < -r || p.y > sz.y+r) return;
-        const intensity = Math.min(1, popK / 1500);
-        const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);
-        g.addColorStop(0,   `rgba(255,80,0,${0.55*intensity})`);
-        g.addColorStop(0.25,`rgba(255,150,0,${0.4*intensity})`);
-        g.addColorStop(0.55,`rgba(255,220,60,${0.2*intensity})`);
-        g.addColorStop(0.85,`rgba(60,100,255,${0.08*intensity})`);
-        g.addColorStop(1,   'rgba(0,0,0,0)');
-        ctx.beginPath();
-        ctx.fillStyle = g;
-        ctx.arc(p.x,p.y,r,0,Math.PI*2);
-        ctx.fill();
-      });
-      ctx.globalCompositeOperation = 'source-over';
-    }
-  });
-  return new CanvasHeat();
-}
+let _popDarkBase = null;
+let _popWms     = null;
+let _popLabels  = null;
 
 function togglePopLayer(){
   const btn = document.getElementById('popToggleBtn');
   if(popLayerOn){
-    if(popLayer) map.removeLayer(popLayer);
+    // Restore OSM basemap
+    if(_popWms)     { map.removeLayer(_popWms);     _popWms = null; }
+    if(_popLabels)  { map.removeLayer(_popLabels);  _popLabels = null; }
+    if(_popDarkBase){ map.removeLayer(_popDarkBase); _popDarkBase = null; }
+    window._osmLayer.addTo(map);
     popLayerOn = false;
     btn.textContent = 'Population off';
     btn.style.borderColor = '';
     btn.style.color = '';
   } else {
-    if(!popLayer) popLayer = buildPopLayer();
-    popLayer.addTo(map);
+    // Swap to population basemap
+    map.removeLayer(window._osmLayer);
+
+    // 1. Dark background so density colors pop
+    _popDarkBase = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+      { attribution:'© CartoDB', maxZoom:19, subdomains:'abcd' }
+    ).addTo(map);
+
+    // 2. Real population density tiles — SEDAC Gridded Population of the World v4
+    _popWms = L.tileLayer.wms(
+      'https://sedac.ciesin.columbia.edu/geoserver/gpw-v4/wms',
+      {
+        layers:      'gpw-v4:gpw-v4-population-density_2020',
+        format:      'image/png',
+        transparent: true,
+        opacity:     0.85,
+        version:     '1.1.1',
+        attribution: 'SEDAC GPW v4 · Columbia/NASA'
+      }
+    ).addTo(map);
+
+    // 3. Labels layer on top so city names stay readable
+    _popLabels = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+      { attribution:'', maxZoom:19, subdomains:'abcd', pane:'shadowPane' }
+    ).addTo(map);
+
     popLayerOn = true;
     btn.textContent = 'Population on';
     btn.style.borderColor = 'var(--accent)';
