@@ -222,40 +222,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // County population lookup — served from local file (no external API needed)
-  if (url === '/census-counties') {
-    try {
-      const data = fs.readFileSync(path.join(__dirname, 'county-pop.json'), 'utf8');
-      res.writeHead(200, { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'public,max-age=86400' });
-      res.end(data);
-    } catch(e) {
-      res.writeHead(500, CORS);
-      res.end(JSON.stringify({ error: e.message }));
-    }
-    return;
-  }
-
-  // Population density tile proxy — proxies ESRI USA Population Density MapServer
-  // URL pattern: /pop-tile/{z}/{y}/{x}  (ESRI uses y/x order)
-  if (url.startsWith('/pop-tile/')) {
-    const parts = url.replace('/pop-tile/', '').split('/');
-    if (parts.length === 3) {
-      const [z, y, x] = parts;
-      const upstream = `https://server.arcgisonline.com/ArcGIS/rest/services/Demographics/USA_Population_Density/MapServer/tile/${z}/${y}/${x}`;
-      try {
-        const r = await fetch(upstream, { headers: { 'User-Agent': 'LeadScout/1.0' } });
-        const buf = Buffer.from(await r.arrayBuffer());
-        const ct = r.headers.get('content-type') || 'image/png';
-        res.writeHead(r.status, { ...CORS, 'Content-Type': ct, 'Cache-Control': 'public,max-age=86400' });
-        res.end(buf);
-      } catch(e) {
-        res.writeHead(502, CORS);
-        res.end('tile fetch failed');
-      }
-      return;
-    }
-  }
-
   // All routes below are API — require a valid Supabase session token
   const authToken = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
   if (!(await verifySupaToken(authToken))) {
