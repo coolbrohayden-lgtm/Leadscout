@@ -867,7 +867,6 @@ select:focus { border-color:var(--accent); }
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="/auth.js"></script>
 <script>
 /* @preserve
@@ -1238,6 +1237,47 @@ const POP_POINTS = [
 let popLayer = null;
 let popLayerOn = false;
 
+function buildPopLayer(){
+  const CanvasHeat = L.Layer.extend({
+    onAdd(map){
+      this._map = map;
+      this._canvas = document.createElement('canvas');
+      this._canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:250;';
+      map.getPanes().overlayPane.appendChild(this._canvas);
+      map.on('moveend zoomend resize', this._draw, this);
+      this._draw();
+    },
+    onRemove(map){
+      map.getPanes().overlayPane.removeChild(this._canvas);
+      map.off('moveend zoomend resize', this._draw, this);
+    },
+    _draw(){
+      const map = this._map;
+      const sz = map.getSize();
+      const c = this._canvas;
+      c.width = sz.x; c.height = sz.y;
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0,0,sz.x,sz.y);
+      const zoom = map.getZoom();
+      const r = Math.max(30, 260 - zoom * 18);
+      POP_POINTS.forEach(([lat,lng,intensity])=>{
+        const p = map.latLngToContainerPoint([lat,lng]);
+        const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);
+        const a = intensity * 0.7;
+        g.addColorStop(0,   `rgba(255,40,0,${a})`);
+        g.addColorStop(0.3, `rgba(255,140,0,${a*0.75})`);
+        g.addColorStop(0.6, `rgba(0,200,255,${a*0.35})`);
+        g.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.beginPath();
+        ctx.fillStyle = g;
+        ctx.arc(p.x,p.y,r,0,Math.PI*2);
+        ctx.fill();
+      });
+    }
+  });
+  return new CanvasHeat();
+}
+
 function togglePopLayer(){
   const btn = document.getElementById('popToggleBtn');
   if(popLayerOn){
@@ -1247,15 +1287,7 @@ function togglePopLayer(){
     btn.style.borderColor = '';
     btn.style.color = '';
   } else {
-    if(!popLayer){
-      popLayer = L.heatLayer(POP_POINTS, {
-        radius: 60,
-        blur: 50,
-        maxZoom: 8,
-        max: 1.0,
-        gradient: { 0.2: '#1a1aff', 0.4: '#00ccff', 0.6: '#00ff88', 0.8: '#ffcc00', 1.0: '#ff3300' }
-      });
-    }
+    if(!popLayer) popLayer = buildPopLayer();
     popLayer.addTo(map);
     popLayerOn = true;
     btn.textContent = 'Population on';
