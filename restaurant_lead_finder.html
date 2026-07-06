@@ -1045,6 +1045,7 @@ function extFetch(type, handle, name, city, url, bizType) {
   map.on('zoomend', () => redrawGrid(true));
   redrawGrid(true);
   buildMetroList();
+  togglePopLayer();
   // Load shared keys (google + rapid) from Supabase
   const {data: sharedSettings} = await supabaseClient.from('shared_settings').select('*').eq('id',1).single();
   if(sharedSettings?.google_key) document.getElementById('apiKeyInput').value = sharedSettings.google_key;
@@ -1320,10 +1321,6 @@ function buildMetroList(){
 
 function jumpToMetro(lat, lng, zoom){
   map.setView([lat, lng], zoom);
-  // Give the grid a moment to redraw then select all visible cells
-  setTimeout(() => {
-    selectAllVisible();
-  }, 400);
 }
 
 function updateStats(){
