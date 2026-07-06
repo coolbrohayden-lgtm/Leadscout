@@ -1220,29 +1220,78 @@ function _popColor(pop) {
   return '#FFFFB2';
 }
 
+// ── Pop debug panel ──
+function _popLog(msg, isErr) {
+  let el = document.getElementById('_popDebug');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '_popDebug';
+    el.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:9999;background:#111e;color:#0f0;font:12px/1.6 monospace;padding:10px 14px;border-radius:6px;max-width:420px;max-height:260px;overflow-y:auto;border:1px solid #0f04;pointer-events:none';
+    document.body.appendChild(el);
+  }
+  const line = document.createElement('div');
+  line.style.color = isErr ? '#f66' : '#0f0';
+  line.textContent = (new Date).toISOString().slice(11,23) + ' ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  console.log('[PopDebug]', msg);
+}
+function _popClearDebug() {
+  const el = document.getElementById('_popDebug');
+  if (el) el.remove();
+}
+
 async function _buildPopLayer() {
   if (!_popGeoData) {
-    const [topo, census] = await Promise.all([
-      fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json').then(r => r.json()),
-      fetch('https://api.census.gov/data/2020/dec/pl?get=P1_001N&for=county:*').then(r => r.json())
-    ]);
+    _popLog('topojson lib: ' + (typeof topojson !== 'undefined' ? 'OK' : 'MISSING'));
+
+    let topo, census;
+
+    _popLog('fetching us-atlas counties…');
+    try {
+      const r = await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json');
+      _popLog('us-atlas status: ' + r.status + ' ' + r.statusText);
+      topo = await r.json();
+      _popLog('us-atlas features: ' + (topo?.objects?.counties ? 'present' : 'MISSING key'));
+    } catch(e) {
+      _popLog('us-atlas fetch error: ' + e.message, true);
+      throw e;
+    }
+
+    _popLog('fetching Census 2020 population…');
+    try {
+      const r = await fetch('https://api.census.gov/data/2020/dec/pl?get=P1_001N&for=county:*');
+      _popLog('census status: ' + r.status + ' ' + r.statusText);
+      census = await r.json();
+      _popLog('census rows: ' + (Array.isArray(census) ? census.length : 'not array'));
+    } catch(e) {
+      _popLog('census fetch error: ' + e.message, true);
+      throw e;
+    }
 
     // Build FIPS → population lookup from Census API rows (row 0 is header)
     const pop = {};
     census.slice(1).forEach(([p, state, county]) => {
       pop[state.padStart(2,'0') + county.padStart(3,'0')] = parseInt(p) || 0;
     });
+    _popLog('pop lookup built: ' + Object.keys(pop).length + ' counties');
 
     // Convert TopoJSON → GeoJSON and attach population
     const geojson = topojson.feature(topo, topo.objects.counties);
+    _popLog('geojson features: ' + geojson.features.length);
     geojson.features.forEach(f => {
       const fips = String(f.id).padStart(5, '0');
       f.properties._pop = pop[fips] || 0;
     });
+
+    // Sanity: show Miami-Dade (12086) population
+    const mdpop = pop['12086'];
+    _popLog('Miami-Dade pop: ' + (mdpop || 'NOT FOUND'));
+
     _popGeoData = geojson;
   }
 
-  return L.geoJSON(_popGeoData, {
+  const layer = L.geoJSON(_popGeoData, {
     style: f => ({
       fillColor: _popColor(f.properties._pop),
       fillOpacity: 0.70,
@@ -1252,6 +1301,8 @@ async function _buildPopLayer() {
     }),
     interactive: false
   });
+  _popLog('L.geoJSON layer created, adding to map…');
+  return layer;
 }
 
 async function togglePopLayer(){
@@ -1261,6 +1312,7 @@ async function togglePopLayer(){
     if(_popLabels)  { map.removeLayer(_popLabels);  _popLabels = null; }
     if(_popDarkBase){ map.removeLayer(_popDarkBase); _popDarkBase = null; }
     window._osmLayer.addTo(map);
+    _popClearDebug();
     popLayerOn = false;
     btn.textContent = 'Population off';
     btn.style.borderColor = '';
@@ -1282,8 +1334,9 @@ async function togglePopLayer(){
       // County choropleth — Census 2020 population, us-atlas boundaries
       const layer = await _buildPopLayer();
       _popWms = layer.addTo(map);
+      _popLog('✓ layer added to map');
     } catch(e) {
-      console.error('Population load failed:', e);
+      _popLog('FATAL: ' + e.message, true);
     }
 
     // City labels on top
