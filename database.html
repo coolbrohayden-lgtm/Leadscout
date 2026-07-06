@@ -242,6 +242,19 @@ tr:hover td{background:rgba(108,99,255,.04);}
 #filtersBtn.has-active{border-color:var(--accent);color:var(--accent-hover);background:var(--accent-soft);}
 .filter-count{display:inline-block;background:var(--accent);color:#fff;font-size:9px;font-weight:800;border-radius:9px;padding:1px 6px;margin-left:6px;vertical-align:1px;}
 
+/* Tags */
+.tag-pill{display:inline-flex;align-items:center;gap:4px;background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:1.5px 8px;font-size:9.5px;font-weight:500;color:var(--muted);margin:1px 3px 1px 0;}
+.tag-pill .x{cursor:pointer;color:var(--muted2);font-size:10px;line-height:1;}
+.tag-pill .x:hover{color:var(--hot);}
+.tag-add{background:transparent;border:1px dashed var(--border);border-radius:20px;padding:1.5px 8px;font-size:9.5px;font-weight:600;color:var(--muted2);cursor:pointer;font-family:inherit;transition:all .15s;}
+.tag-add:hover{border-color:var(--accent);color:var(--accent-hover);}
+
+/* Bulk selection */
+.row-chk,.select-all-chk{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;}
+.bulk-bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border-light);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow-lg);z-index:250;}
+.bulk-bar .count{font-size:12px;font-weight:600;color:var(--text);padding-right:6px;border-right:1px solid var(--border);}
+.bulk-bar select{background:var(--surface3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11.5px;font-family:inherit;padding:5px 8px;outline:none;}
+
 /* Compact icon action buttons in table rows */
 .icon-btn{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted);font-size:12px;cursor:pointer;transition:all .15s;padding:0;}
 .icon-btn:hover{border-color:var(--border-light);color:var(--text);background:var(--surface3);}
@@ -344,6 +357,9 @@ tr:hover td{background:rgba(108,99,255,.04);}
     <span class="filter-label">Type</span>
     <button class="fchip active" data-f="type_all" onclick="setBizFilter('all')">All Types</button>
   </div>
+  <div class="filter-chips" id="tagFilterRow" style="display:none">
+    <span class="filter-label">Tags</span>
+  </div>
   <div class="filter-chips">
     <span class="filter-label">Social</span>
     <button class="fchip" data-f="no_ig"      onclick="setFilter('no_ig')">No Instagram</button>
@@ -419,12 +435,28 @@ tr:hover td{background:rgba(108,99,255,.04);}
 </div>
 <input type="file" id="importFileInput" accept=".csv,text/csv" style="display:none" onchange="importCSVFile(this.files[0]);this.value=''"/>
 <div class="toast" id="toast"></div>
+<div class="bulk-bar" id="bulkBar" style="display:none">
+  <span class="count" id="bulkCount">0 selected</span>
+  <select onchange="if(this.value){bulkSetStatus(this.value);this.value='';}">
+    <option value="">Set status…</option>
+    <option value="new">New</option>
+    <option value="contacted">Contacted</option>
+    <option value="interested">Interested</option>
+    <option value="signed">Signed</option>
+    <option value="denied">Denied</option>
+  </select>
+  <button class="btn" onclick="bulkAddTag()">Add tag</button>
+  <button class="btn" onclick="bulkExport()">Export</button>
+  <button class="btn btn-danger" onclick="bulkDelete()">Delete</button>
+  <button class="btn" onclick="clearSelection()">Clear</button>
+</div>
 
 <script>
 let allLeads = [];
 let blacklist = [];
 let activeFilters = new Set();    // empty = 'all' (no restriction)
 let activeBizFilters = new Set(); // empty = 'all' (no restriction) — types combine with OR
+let activeTags = new Set(); // empty = 'all' — tags combine with OR (matches any selected tag)
 
 // Pairs of filters that can never both be true for the same lead —
 // selecting one auto-removes the other if it's active.
@@ -468,6 +500,7 @@ async function load(){
   renderStats();
   buildLocationOptions();
   buildBizTypeChips();
+  buildTagFilterChips();
   render();
   const blSection = document.getElementById('blacklistToggle');
   if(blacklist.length){ blSection.style.display='flex'; document.getElementById('blCount').textContent=blacklist.length; }
@@ -515,6 +548,59 @@ function setBizFilter(type) {
   render();
 }
 
+// ── Tags ──
+function tagList(l){ return (l.tags||'').split(',').map(t=>t.trim()).filter(Boolean); }
+
+function tagsHtml(l){
+  const tags = tagList(l);
+  const pills = tags.map(t=>`<span class="tag-pill">${t}<span class="x" onclick="event.stopPropagation();removeTag('${l.place_id}','${t.replace(/'/g,"\\'")}')">✕</span></span>`).join('');
+  return `${pills}<button class="tag-add" onclick="event.stopPropagation();addTag('${l.place_id}')">+ tag</button>`;
+}
+
+async function saveTags(placeId, tags){
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  if(!lead) return;
+  const joined = tags.join(',');
+  lead.tags = joined || null;
+  const {error} = await supabaseClient.from('leads').update({tags: lead.tags}).eq('place_id', placeId);
+  if(error){ console.error('saveTags', error); showToast('❌ Save failed — is the tags column added in Supabase?'); return; }
+  buildTagFilterChips();
+  render();
+}
+
+async function addTag(placeId){
+  const t = prompt('Add a tag:');
+  if(!t || !t.trim()) return;
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  if(!lead) return;
+  const tags = tagList(lead);
+  if(!tags.includes(t.trim())) tags.push(t.trim());
+  await saveTags(placeId, tags);
+}
+
+async function removeTag(placeId, tag){
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  if(!lead) return;
+  await saveTags(placeId, tagList(lead).filter(t=>t!==tag));
+}
+
+function buildTagFilterChips(){
+  const row = document.getElementById('tagFilterRow');
+  const allTags = [...new Set(allLeads.flatMap(tagList))].sort();
+  if(!allTags.length){ row.style.display='none'; row.innerHTML='<span class="filter-label">Tags</span>'; return; }
+  row.style.display='flex';
+  row.innerHTML = `<span class="filter-label">Tags</span>` + allTags.map(t=>
+    `<button class="fchip${activeTags.has(t)?' active':''}" onclick="setTagFilter('${t.replace(/'/g,"\\'")}')">${t}</button>`
+  ).join('');
+}
+
+function setTagFilter(tag){
+  if(activeTags.has(tag)) activeTags.delete(tag); else activeTags.add(tag);
+  buildTagFilterChips();
+  updateFilterBadge();
+  render();
+}
+
 function buildLocationOptions(){
   const sel = document.getElementById('locationSel');
   const cities = [...new Set(allLeads.map(l=>extractCity(l.address)).filter(Boolean))].sort();
@@ -555,7 +641,7 @@ function refreshFilterChipUI(){
 }
 
 function updateFilterBadge(){
-  const n = activeFilters.size + activeBizFilters.size;
+  const n = activeFilters.size + activeBizFilters.size + activeTags.size;
   const badge = document.getElementById('filterCountBadge');
   const btn = document.getElementById('filtersBtn');
   if(!badge || !btn) return;
@@ -605,6 +691,7 @@ function getFiltered(){
   const minScore=parseInt(document.getElementById('minScoreSel')?.value||'0');
   let leads=allLeads.filter(l=>{
     if(activeBizFilters.size){ if(!activeBizFilters.has(l.business_type||'restaurant')) return false; }
+    if(activeTags.size){ const lTags=tagList(l); if(!lTags.some(t=>activeTags.has(t))) return false; }
     for(const f of activeFilters){ if(!leadPassesFilter(l, f)) return false; }
     if(minScore && (l.score||0)<minScore) return false;
     if(locFilter && !(l.address||'').toLowerCase().includes(locFilter)) return false;
@@ -659,10 +746,11 @@ function render(){
   const leads=getFiltered();
   document.getElementById('countLabel').textContent=`${leads.length} result${leads.length===1?'':'s'}`;
   const c=document.getElementById('tableContainer');
-  if(currentView==='pipeline'){ renderPipeline(leads, c); return; }
+  if(currentView==='pipeline'){ renderPipeline(leads, c); const bar=document.getElementById('bulkBar'); if(bar) bar.style.display='none'; return; }
   if(!leads.length){c.innerHTML='<div class="empty">No leads match this filter.</div>';return;}
   c.innerHTML=`<table>
     <thead><tr>
+      <th style="cursor:default"><input type="checkbox" class="select-all-chk" id="selectAllChk" onchange="toggleSelectAll(this.checked)" title="Select all"/></th>
       <th>Name</th>
       <th>Address</th>
       <th>Phone</th>
@@ -688,10 +776,10 @@ function render(){
       const fb=l.facebook?`<div><a class="pill pill-fb" href="https://facebook.com/${l.facebook}" target="_blank">${fbSvg()} FB</a></div>`
         :l.fb_signal?`<span class="pill pill-fb pill-dim">${fbSvg()} FB?</span>`:'';
       const website=l.website?`<a href="${l.website}" target="_blank" style="color:var(--muted);font-size:10px;text-decoration:none">🌐</a>`:'';
-      const scanDate=l.scanned_at?new Date(l.scanned_at).toLocaleDateString():'';
+      const scanDate=fmtDate(l.scanned_at);
       const ownerHtml = l.owner_name
         ? `<div style="font-size:11px;font-weight:600">${l.owner_name}</div>
-           ${l.owner_phone?`<div style="font-size:10px;color:var(--accent)">${l.owner_phone}</div>`:''}
+           ${l.owner_phone?`<div style="font-size:10px;color:var(--accent)">${fmtPhone(l.owner_phone)}</div>`:''}
            ${l.owner_email?`<div style="font-size:10px;color:var(--muted)">${l.owner_email}</div>`:''}
            <div style="font-size:9px;color:var(--muted);margin-top:1px">${l.owner_source||''}</div>
            <button class="btn" style="font-size:8px;padding:1px 5px;margin-top:2px;opacity:0.5" onclick="clearOwner('${l.place_id}')">✕ Clear</button>`
@@ -703,6 +791,7 @@ function render(){
       const wasExported = !!l.exported_at;
       const initials = (l.name||'?').replace(/[^A-Za-z0-9 ]/g,'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
       return `<tr id="row-${l.place_id}"${wasExported?' style="opacity:0.6"':''}>
+        <td><input type="checkbox" class="row-chk" ${selectedIds.has(l.place_id)?'checked':''} onchange="toggleRowSelect('${l.place_id}',this.checked)"/></td>
         <td>
           <div class="name-cell">
             <div class="avatar av-${(l.label||'cold').toLowerCase()}" title="${l.label||''}">${initials}</div>
@@ -714,12 +803,13 @@ function render(){
               </div>
               ${l.assigned_to?`<div style="font-size:10px;color:var(--accent-hover);margin-top:2px">${l.assigned_to}</div>`:''}
               ${scanDate?`<div style="font-size:9.5px;color:var(--muted2);margin-top:2px">${scanDate}</div>`:''}
+              <div style="margin-top:4px">${tagsHtml(l)}</div>
             </div>
           </div>
         </td>
         <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
         <td style="white-space:nowrap">
-          ${l.phone||'—'}
+          ${fmtPhone(l.phone)}
           ${l.business_email?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><a href="mailto:${l.business_email}" style="color:var(--muted);text-decoration:none">✉️ ${l.business_email}</a></div>`:''}
         </td>
         <td style="min-width:140px" id="owner-${l.place_id}">${ownerHtml}</td>
@@ -753,6 +843,7 @@ function render(){
     }).join('')}
     </tbody>
   </table>`;
+  renderBulkBar();
 }
 
 // ── Pipeline (kanban) view ──
@@ -943,6 +1034,7 @@ function pipeCard(l){
     <div class="nm">${l.name} ${l.exported_at?'<span style="color:var(--cold);font-size:10px" title="Already exported">✓</span>':''}</div>
     <div class="meta">${label}<span style="margin:0 6px;color:var(--muted2)">·</span><span style="font-weight:600;color:var(--muted)">${l.score||0} pts</span>${value?`<span style="margin:0 6px;color:var(--muted2)">·</span>${value}`:''}${l.assigned_to?`<span style="margin:0 6px;color:var(--muted2)">·</span><span style="color:var(--accent-hover)">${l.assigned_to}</span>`:''}</div>
     ${fb?`<div style="margin-bottom:4px">${fb}</div>`:''}
+    ${tagList(l).length?`<div style="margin-bottom:4px">${tagList(l).map(t=>`<span class="tag-pill">${t}</span>`).join('')}</div>`:''}
     <div class="socials">${ig}${tt}</div>
     <div class="foot">
       <button class="icon-btn" title="Sales script" onclick="showSalesScript('${l.place_id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg></button>
@@ -1017,13 +1109,12 @@ async function saveNotes(placeId, notes){
   if(error) console.error('saveNotes', error);
 }
 
-async function deleteLead(placeId){
-  if(!confirm('Remove this lead from the database?')) return;
+async function deleteLead(placeId, skipConfirm){
+  if(!skipConfirm && !confirm('Remove this lead from the database?')) return;
   allLeads = allLeads.filter(l=>l.place_id!==placeId);
   await dbDel('leads', placeId);
   await dbDel('scan_cache', placeId);
-  renderStats();
-  render();
+  if(!skipConfirm){ renderStats(); render(); }
 }
 
 async function clearDenied(){
@@ -1112,9 +1203,9 @@ async function migrateLocalExports(){
   localStorage.removeItem('leadscout_exported');
 }
 
-function exportCSV(){
-  const leads=getFiltered();
-  const header=['title','totalScore','reviewsCount','street','city','state','countryCode','website','phone','instagram','ig_followers','tiktok','tt_followers','facebook','leadScore','label','status','dealValue','nextFollowup','notes','ownerName','ownerPhone','ownerEmail'];
+function exportCSV(leadsOverride){
+  const leads=leadsOverride||getFiltered();
+  const header=['title','totalScore','reviewsCount','street','city','state','countryCode','website','phone','instagram','ig_followers','tiktok','tt_followers','facebook','leadScore','label','status','dealValue','nextFollowup','tags','notes','ownerName','ownerPhone','ownerEmail'];
   const rows=[header.join(','),...leads.map(l=>{
     const {street,city,state}=parseAddress(l.address);
     return [
@@ -1137,6 +1228,7 @@ function exportCSV(){
       esc(l.status||''),
       esc(l.deal_value||''),
       esc(l.next_followup||''),
+      esc(l.tags||''),
       esc(l.notes||''),
       esc(l.owner_name||''),
       esc(l.owner_phone||''),
@@ -1148,6 +1240,74 @@ function exportCSV(){
   a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
   a.download=`leadscout_${ts}.csv`; a.click();
   markExported(leads.map(l=>l.place_id)).then(()=>render()); // refresh to show checkmarks
+}
+
+// ── Bulk selection ──
+let selectedIds = new Set();
+
+function toggleSelectAll(checked){
+  const leads = getFiltered();
+  if(checked) leads.forEach(l=>selectedIds.add(l.place_id));
+  else leads.forEach(l=>selectedIds.delete(l.place_id));
+  render();
+}
+
+function toggleRowSelect(placeId, checked){
+  if(checked) selectedIds.add(placeId); else selectedIds.delete(placeId);
+  renderBulkBar();
+  const master = document.getElementById('selectAllChk');
+  if(master) master.checked = getFiltered().every(l=>selectedIds.has(l.place_id));
+}
+
+function renderBulkBar(){
+  const bar = document.getElementById('bulkBar');
+  if(!bar) return;
+  const n = selectedIds.size;
+  bar.style.display = n ? 'flex' : 'none';
+  const countEl = document.getElementById('bulkCount');
+  if(countEl) countEl.textContent = `${n} selected`;
+}
+
+function clearSelection(){
+  selectedIds.clear();
+  render();
+}
+
+async function bulkSetStatus(status){
+  const ids = [...selectedIds];
+  for(const id of ids){ await setStatus(id, status); }
+  showToast(`Updated ${ids.length} lead${ids.length===1?'':'s'} to ${status}`);
+}
+
+async function bulkAddTag(){
+  const t = prompt(`Add a tag to ${selectedIds.size} selected lead(s):`);
+  if(!t || !t.trim()) return;
+  const tag = t.trim();
+  const ids = [...selectedIds];
+  for(const id of ids){
+    const lead = allLeads.find(l=>l.place_id===id);
+    if(!lead) continue;
+    const tags = tagList(lead);
+    if(!tags.includes(tag)) tags.push(tag);
+    await saveTags(id, tags);
+  }
+  showToast(`Tagged ${ids.length} lead${ids.length===1?'':'s'} with "${tag}"`);
+}
+
+function bulkExport(){
+  const leads = allLeads.filter(l=>selectedIds.has(l.place_id));
+  if(!leads.length) return;
+  exportCSV(leads);
+}
+
+async function bulkDelete(){
+  const ids = [...selectedIds];
+  if(!ids.length) return;
+  if(!confirm(`Delete ${ids.length} selected lead(s)? This can't be undone.`)) return;
+  for(const id of ids){ await deleteLead(id, true); }
+  selectedIds.clear();
+  renderStats(); render();
+  showToast(`Deleted ${ids.length} lead${ids.length===1?'':'s'}`);
 }
 
 // ── CSV import (GoHighLevel contact exports + LeadScout exports) ──
@@ -1235,7 +1395,7 @@ async function importCSVFile(file){
     for(const [re,st] of STAGE_MAP){ if(re.test(rawStage)){ status=st; break; } }
 
     const addressParts=[g(iStreet),g(iCity),g(iState)].filter(Boolean);
-    const notesParts=[g(iNotes),g(iTags)?`tags: ${g(iTags)}`:''].filter(Boolean);
+    const rawTags = g(iTags).split(/[,;]/).map(t=>t.trim()).filter(Boolean).join(',');
     const rawValue=g(iValue).replace(/[$,]/g,'');
 
     leads.push({
@@ -1246,7 +1406,8 @@ async function importCSVFile(file){
       address: addressParts.join(', ')||null,
       website: g(iWebsite)||null,
       instagram,
-      notes: notesParts.join(' — ')||null,
+      notes: g(iNotes)||null,
+      tags: rawTags||null,
       deal_value: rawValue&&!isNaN(parseFloat(rawValue))?parseFloat(rawValue):null,
       status,
       owner_name: g(iOwnerN)||null,
@@ -1394,6 +1555,21 @@ function fmtFollowers(n) {
   if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'')+'k';
   return String(n);
 }
+function fmtPhone(raw) {
+  if (!raw) return '—';
+  const digits = String(raw).replace(/\D/g,'').replace(/^1(?=\d{10}$)/,'');
+  if (digits.length !== 10) return raw;
+  const display = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  return `<a href="tel:+1${digits}" style="color:inherit;text-decoration:none">${display}</a>`;
+}
+
+function fmtDate(input) {
+  if (!input) return '';
+  const d = new Date(input);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+
 function fmtMoney(n) {
   if (!n) return '$0';
   n = Number(n);
@@ -2269,6 +2445,7 @@ async function autoRefresh() {
     renderStats();
     buildLocationOptions();
     buildBizTypeChips();
+    buildTagFilterChips();
     render();
     if (added) {
       const badge = document.getElementById('refreshBadge');
