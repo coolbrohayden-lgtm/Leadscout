@@ -1242,14 +1242,17 @@ function buildPopLayer(){
     onAdd(map){
       this._map = map;
       this._canvas = document.createElement('canvas');
-      this._canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:250;';
-      map.getPanes().overlayPane.appendChild(this._canvas);
-      map.on('moveend zoomend resize', this._draw, this);
+      // Attach directly to the map container — not inside any pane —
+      // so Leaflet's pane CSS transforms never affect it
+      this._canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:450;';
+      map.getContainer().appendChild(this._canvas);
+      // Redraw on every move frame so it stays locked to geography
+      map.on('move zoom resize', this._draw, this);
       this._draw();
     },
     onRemove(map){
-      map.getPanes().overlayPane.removeChild(this._canvas);
-      map.off('moveend zoomend resize', this._draw, this);
+      map.getContainer().removeChild(this._canvas);
+      map.off('move zoom resize', this._draw, this);
     },
     _draw(){
       const map = this._map;
