@@ -707,7 +707,7 @@ header input::placeholder{color:var(--muted2);}
 .main { display: flex; flex: 1; overflow: hidden; }
 #map { flex: 1; }
 .leaflet-tile { filter: brightness(0.6) saturate(0.5); }
-.sidebar { width: 300px; flex-shrink: 0; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.sidebar { width: 300px; flex-shrink: 0; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
 .sec { padding: 13px 15px; border-bottom: 1px solid var(--border); }
 .sec h3 { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; }
 .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
@@ -835,16 +835,6 @@ select:focus { border-color:var(--accent); }
         <div id="metroList" style="display:flex;flex-direction:column;gap:10px"></div>
       </div>
     </div>
-    <div class="sec">
-      <h3>Legend</h3>
-      <div class="legend">
-        <div class="li"><div class="sq" style="background:rgba(108,99,255,.55)"></div>Selected chunk</div>
-        <div class="li"><div class="sq" style="background:rgba(74,222,128,.3)"></div>Scanned</div>
-        <div class="li"><div class="dot" style="background:var(--hot)"></div>HOT lead (score ≥ 70)</div>
-        <div class="li"><div class="dot" style="background:var(--warm)"></div>WARM lead (40–69)</div>
-        <div class="li"><div class="dot" style="background:var(--cold)"></div>COLD lead (&lt; 40)</div>
-      </div>
-    </div>
     <div class="status" id="statusBar">Select zones on the map, then scan.</div>
     <div class="prog"><div class="prog-fill" id="progFill"></div></div>
     <div class="leads-hdr">
@@ -877,6 +867,7 @@ select:focus { border-color:var(--accent); }
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="/auth.js"></script>
 <script>
 /* @preserve
@@ -1217,7 +1208,33 @@ function selectAllVisible(){
   updateStats();
 }
 
-// ── Population density overlay ──
+// ── Population density overlay (Leaflet.heat) ──
+// [lat, lng, intensity] — top US metros weighted by population (millions)
+const POP_POINTS = [
+  [40.7128,-74.006,1],[34.0522,-118.2437,1],[41.8781,-87.6298,0.9],[29.7604,-95.3698,0.85],
+  [33.4484,-112.074,0.8],[19.3988,-99.0842,0.75],[29.4241,-98.4936,0.75],[32.7157,-117.1611,0.7],
+  [32.7767,-96.797,0.7],[30.2672,-97.7431,0.7],[37.3382,-121.8863,0.65],[28.5383,-81.3792,0.6],
+  [35.2271,-80.8431,0.6],[33.749,-84.388,0.6],[25.7617,-80.1918,0.6],[36.1699,-115.1398,0.55],
+  [36.1627,-86.7816,0.55],[38.8951,-77.0364,0.55],[39.9526,-75.1652,0.55],[42.3601,-71.0589,0.5],
+  [37.7749,-122.4194,0.5],[35.4676,-97.5164,0.5],[30.3322,-81.6557,0.5],[37.9577,-91.7714,0.45],
+  [47.6062,-122.3321,0.45],[39.7392,-104.9903,0.45],[38.2527,-85.7585,0.4],[27.9506,-82.4572,0.4],
+  [26.1224,-80.1373,0.4],[26.7153,-80.0534,0.35],[43.0481,-76.1474,0.35],[42.8864,-78.8784,0.35],
+  [42.3314,-83.0458,0.35],[39.1031,-84.512,0.35],[41.4993,-81.6944,0.35],[41.0534,-85.1394,0.3],
+  [35.9606,-83.9207,0.3],[35.1495,-90.049,0.3],[38.627,-90.1994,0.3],[39.0997,-94.5786,0.3],
+  [41.2565,-95.9345,0.3],[44.9778,-93.265,0.3],[43.0731,-89.4012,0.3],[33.0198,-96.6989,0.3],
+  [29.3013,-94.7977,0.3],[30.0219,-90.1047,0.3],[32.3668,-86.3,0.25],[33.2098,-87.5692,0.25],
+  [35.4822,-86.7827,0.25],[34.7465,-92.2896,0.25],[36.8529,-75.978,0.25],[38.0336,-78.5083,0.25],
+  [39.2904,-76.6122,0.25],[40.4406,-79.9959,0.25],[40.7357,-74.1724,0.25],[41.7003,-86.2179,0.25],
+  [42.9634,-85.6681,0.25],[45.5231,-122.6765,0.25],[37.6879,-122.4702,0.25],[37.8044,-122.2712,0.25],
+  [33.9425,-118.4081,0.4],[34.1478,-118.1445,0.35],[34.0195,-118.4912,0.3],[33.8121,-117.919,0.3],
+  [33.6846,-117.8265,0.3],[33.7701,-118.1937,0.25],[34.0633,-118.359,0.25],[33.6603,-117.9992,0.3],
+  [40.6501,-73.9496,0.6],[40.7282,-73.7949,0.45],[40.8448,-73.8648,0.5],[40.7282,-74.1574,0.4],
+  [40.7178,-74.0431,0.35],[40.7357,-73.8799,0.4],[40.6892,-74.0445,0.3],[40.7587,-73.9787,0.55],
+  [25.9009,-80.1872,0.3],[25.8576,-80.278,0.3],[26.1101,-80.2494,0.3],[26.7056,-80.0364,0.25],
+  [27.3364,-82.5307,0.25],[28.0836,-80.6081,0.25],[28.2489,-81.6159,0.25],[27.773,-82.6796,0.25],
+  [30.4213,-91.0796,0.25],[32.3613,-90.1607,0.2],[32.5252,-92.1193,0.2],[30.6954,-88.0399,0.2],
+];
+
 let popLayer = null;
 let popLayerOn = false;
 
@@ -1231,11 +1248,13 @@ function togglePopLayer(){
     btn.style.color = '';
   } else {
     if(!popLayer){
-      // ESRI USA Population Density (free, no key needed)
-      popLayer = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/Demographics/USA_Population_Density/MapServer/tile/{z}/{y}/{x}',
-        { opacity: 0.55, maxZoom: 17, attribution: 'ESRI Population Density' }
-      );
+      popLayer = L.heatLayer(POP_POINTS, {
+        radius: 60,
+        blur: 50,
+        maxZoom: 8,
+        max: 1.0,
+        gradient: { 0.2: '#1a1aff', 0.4: '#00ccff', 0.6: '#00ff88', 0.8: '#ffcc00', 1.0: '#ff3300' }
+      });
     }
     popLayer.addTo(map);
     popLayerOn = true;
