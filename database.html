@@ -211,6 +211,28 @@ tr:hover td{background:rgba(108,99,255,.04);}
 
 /* Panels (settings / pending / activity) */
 #settingsPanel,#pendingPanel,#activityPanel{box-shadow:inset 0 -1px 0 var(--border);}
+
+/* Header overflow menu */
+.menu-wrap{position:relative;}
+.menu-pop{display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--surface2);border:1px solid var(--border-light);border-radius:var(--radius);min-width:180px;padding:5px;z-index:200;box-shadow:var(--shadow-lg);}
+.menu-pop.open{display:block;}
+.menu-item{display:block;width:100%;text-align:left;background:transparent;border:none;border-radius:var(--radius-sm);color:var(--text);font-size:12px;font-weight:500;font-family:inherit;padding:8px 11px;cursor:pointer;transition:background .12s;}
+.menu-item:hover{background:var(--surface3);}
+.menu-item.danger{color:var(--hot);}
+.menu-item.danger:hover{background:rgba(255,107,107,.1);}
+.hdr-sep{width:1px;height:20px;background:var(--border);margin:0 4px;}
+
+/* Collapsible filter panel */
+#filterPanel{padding:12px 24px 14px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;gap:9px;}
+.filter-label{font-size:9.5px;color:var(--muted2);font-weight:700;letter-spacing:.09em;text-transform:uppercase;min-width:46px;}
+#filtersBtn.has-active{border-color:var(--accent);color:var(--accent-hover);background:var(--accent-soft);}
+.filter-count{display:inline-block;background:var(--accent);color:#fff;font-size:9px;font-weight:800;border-radius:9px;padding:1px 6px;margin-left:6px;vertical-align:1px;}
+
+/* Compact icon action buttons in table rows */
+.icon-btn{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted);font-size:12px;cursor:pointer;transition:all .15s;padding:0;}
+.icon-btn:hover{border-color:var(--border-light);color:var(--text);background:var(--surface3);}
+.icon-btn.danger:hover{border-color:var(--hot);color:var(--hot);background:rgba(255,107,107,.08);}
+.action-row{display:flex;gap:4px;align-items:center;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="/auth.js"></script>
@@ -221,17 +243,23 @@ tr:hover td{background:rgba(108,99,255,.04);}
   <div class="logo">Lead<span>Scout</span></div>
   <a href="/" class="back-btn">← Back to Map</a>
   <div class="hdr-right">
-    <button class="btn" onclick="toggleAutoRefresh()" style="display:flex;align-items:center;gap:5px"><span id="refreshDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block"></span>Live</button>
+    <button class="btn" onclick="toggleAutoRefresh()" style="display:flex;align-items:center;gap:6px"><span id="refreshDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block"></span>Live</button>
     <span id="refreshBadge" style="font-size:10px;color:var(--cold);opacity:0;transition:opacity .4s"></span>
-    <button class="btn" onclick="exportCSV()">Export CSV</button>
-    <button class="btn" onclick="toggleSettings()" id="settingsBtn" style="display:none">⚙️ Settings</button>
-    <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">👤 Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
     <button class="btn" onclick="toggleActivityPanel()">🕘 Activity</button>
-    <button class="btn btn-danger" onclick="clearDenied()">Clear Denied</button>
-    <button class="btn btn-danger" onclick="clearAll()">🗑 Clear All</button>
-  </div>
+    <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">👤 Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
+    <button class="btn btn-p" onclick="exportCSV()">⬇ Export CSV</button>
+    <div class="menu-wrap">
+      <button class="btn" onclick="toggleHdrMenu(event)" title="More actions">⋯</button>
+      <div class="menu-pop" id="hdrMenu">
+        <button class="menu-item" id="settingsBtn" onclick="toggleHdrMenu();toggleSettings()" style="display:none">⚙️ Settings</button>
+        <button class="menu-item" onclick="toggleHdrMenu();clearDenied()">Clear Denied</button>
+        <button class="menu-item danger" onclick="toggleHdrMenu();clearAll()">🗑 Clear All Leads</button>
+      </div>
+    </div>
+    <span class="hdr-sep"></span>
     <span id="userLabel" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
     <button class="btn" style="font-size:11px" onclick="signOut()">Sign Out</button>
+  </div>
   </header>
   <div id="settingsPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);gap:16px;flex-wrap:wrap;align-items:center">
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Apollo.io API Key (for owner lookup)<input id="apolloKeyInput" type="password" placeholder="Apollo API key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
@@ -257,15 +285,37 @@ tr:hover td{background:rgba(108,99,255,.04);}
     <button id="viewPipeBtn" onclick="setView('pipeline')">📊 Pipeline</button>
   </div>
   <input class="search-box" id="searchBox" placeholder="Search by name, address, notes…" oninput="render()"/>
-  <div class="filter-chips" style="margin-bottom:4px">
-    <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">LABEL</span>
+  <button class="btn" id="filtersBtn" onclick="toggleFilters()">☰ Filters<span id="filterCountBadge" class="filter-count" style="display:none"></span></button>
+  <select class="sort-sel" id="locationSel" onchange="render()">
+    <option value="">📍 All locations</option>
+  </select>
+  <select class="sort-sel" id="sortSel" onchange="render()">
+    <option value="score_desc">Score ↓</option>
+    <option value="score_asc">Score ↑</option>
+    <option value="name_asc">Name A–Z</option>
+    <option value="date_desc">Scanned (newest)</option>
+    <option value="status">Status</option>
+  </select>
+  <select class="sort-sel" id="minScoreSel" onchange="render()">
+    <option value="0">Min score: any</option>
+    <option value="50">Min score: 50</option>
+    <option value="70">Min score: 70 (WARM+)</option>
+    <option value="100">Min score: 100</option>
+    <option value="130">Min score: 130 (HOT+)</option>
+  </select>
+  <span id="countLabel" style="font-size:11px;color:var(--muted);margin-left:auto;"></span>
+</div>
+
+<div id="filterPanel" style="display:none">
+  <div class="filter-chips">
+    <span class="filter-label">Label</span>
     <button class="fchip active" data-f="all" onclick="setFilter('all')">All</button>
     <button class="fchip fc-hot"  data-f="HOT"  onclick="setFilter('HOT')">🔥 HOT</button>
     <button class="fchip fc-warm" data-f="WARM" onclick="setFilter('WARM')">WARM</button>
     <button class="fchip fc-cold" data-f="COLD" onclick="setFilter('COLD')">COLD</button>
   </div>
-  <div class="filter-chips" style="margin-bottom:4px">
-    <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">STATUS</span>
+  <div class="filter-chips">
+    <span class="filter-label">Status</span>
     <button class="fchip" data-f="new"        onclick="setFilter('new')">🆕 New</button>
     <button class="fchip fc-signed"   data-f="signed"    onclick="setFilter('signed')">✅ Signed</button>
     <button class="fchip"             data-f="contacted" onclick="setFilter('contacted')">📞 Contacted</button>
@@ -274,12 +324,12 @@ tr:hover td{background:rgba(108,99,255,.04);}
     <button class="fchip"             data-f="mine"      onclick="setFilter('mine')">🙋 Mine</button>
     <button class="fchip"             data-f="followup_due" onclick="setFilter('followup_due')">⏰ Due</button>
   </div>
-  <div class="filter-chips" style="margin-bottom:4px" id="bizTypeFilterRow">
-    <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">TYPE</span>
+  <div class="filter-chips" id="bizTypeFilterRow">
+    <span class="filter-label">Type</span>
     <button class="fchip active" data-f="type_all" onclick="setBizFilter('all')">All Types</button>
   </div>
-  <div class="filter-chips" style="margin-bottom:4px">
-    <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">SOCIAL</span>
+  <div class="filter-chips">
+    <span class="filter-label">Social</span>
     <button class="fchip" data-f="no_ig"      onclick="setFilter('no_ig')">No Instagram</button>
     <button class="fchip" data-f="has_ig"     onclick="setFilter('has_ig')">Has Instagram</button>
     <button class="fchip" data-f="ig_small"   onclick="setFilter('ig_small')">IG &lt; 1k</button>
@@ -289,26 +339,6 @@ tr:hover td{background:rgba(108,99,255,.04);}
     <button class="fchip" data-f="no_social"  onclick="setFilter('no_social')">No Social At All</button>
     <button class="fchip" data-f="no_website" onclick="setFilter('no_website')">No Website</button>
     <button class="fchip" data-f="has_phone"  onclick="setFilter('has_phone')">Has Phone</button>
-  </div>
-  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-    <select class="sort-sel" id="locationSel" onchange="render()">
-      <option value="">📍 All locations</option>
-    </select>
-    <select class="sort-sel" id="sortSel" onchange="render()">
-      <option value="score_desc">Score ↓</option>
-      <option value="score_asc">Score ↑</option>
-      <option value="name_asc">Name A–Z</option>
-      <option value="date_desc">Scanned (newest)</option>
-      <option value="status">Status</option>
-    </select>
-    <select class="sort-sel" id="minScoreSel" onchange="render()">
-      <option value="0">Min score: any</option>
-      <option value="50">Min score: 50</option>
-      <option value="70">Min score: 70 (WARM+)</option>
-      <option value="100">Min score: 100</option>
-      <option value="130">Min score: 130 (HOT+)</option>
-    </select>
-    <span id="countLabel" style="font-size:11px;color:var(--muted);margin-left:4px;"></span>
   </div>
 </div>
 
@@ -454,7 +484,7 @@ function buildBizTypeChips(){
     const label = BIZ_LABELS[t] || t.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
     return `<button class="fchip${activeBizFilters.has(t)?' active':''}" onclick="setBizFilter('${t}')">${label}</button>`;
   }).join('');
-  row.innerHTML = `<span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;margin-right:2px">TYPE</span>
+  row.innerHTML = `<span class="filter-label">Type</span>
     <button class="fchip${activeBizFilters.size===0?' active':''}" onclick="setBizFilter('all')">All Types</button>${chips}`;
   row.style.display = types.length > 0 ? 'flex' : 'none';
 }
@@ -464,6 +494,7 @@ function setBizFilter(type) {
   else if(activeBizFilters.has(type)){ activeBizFilters.delete(type); }
   else { activeBizFilters.add(type); }
   buildBizTypeChips();
+  updateFilterBadge();
   render();
 }
 
@@ -503,7 +534,32 @@ function refreshFilterChipUI(){
     const f = b.dataset.f;
     b.classList.toggle('active', f==='all' ? activeFilters.size===0 : activeFilters.has(f));
   });
+  updateFilterBadge();
 }
+
+function updateFilterBadge(){
+  const n = activeFilters.size + activeBizFilters.size;
+  const badge = document.getElementById('filterCountBadge');
+  const btn = document.getElementById('filtersBtn');
+  if(!badge || !btn) return;
+  badge.style.display = n ? 'inline-block' : 'none';
+  badge.textContent = n;
+  btn.classList.toggle('has-active', n > 0);
+}
+
+function toggleFilters(){
+  const p = document.getElementById('filterPanel');
+  p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+}
+
+function toggleHdrMenu(e){
+  if(e) e.stopPropagation();
+  document.getElementById('hdrMenu').classList.toggle('open');
+}
+document.addEventListener('click', e=>{
+  const menu = document.getElementById('hdrMenu');
+  if(menu && menu.classList.contains('open') && !e.target.closest('.menu-wrap')) menu.classList.remove('open');
+});
 
 function leadPassesFilter(l, f){
   switch(f){
@@ -660,11 +716,13 @@ function render(){
           ${followupBadge(l)}
         </td>
         <td><input class="notes-input" value="${(l.notes||'').replace(/"/g,'&quot;')}" placeholder="Add notes…" onblur="saveNotes('${l.place_id}',this.value)"/></td>
-        <td style="white-space:nowrap">
-          <button class="btn" style="font-size:10px;padding:2px 8px" onclick="showSalesScript('${l.place_id}')">📝 Script</button>
-          <button class="btn" style="font-size:10px;padding:2px 8px;margin-top:3px" onclick="showLeadHistory('${l.place_id}')">🕘 History</button>
-          <button class="btn" style="font-size:10px;padding:2px 8px;margin-top:3px" onclick="claimLead('${l.place_id}')">${l.assigned_to===_myName?'✋ Release':'🙋 Claim'}</button>
-          <button class="btn" style="font-size:10px;padding:2px 8px;margin-top:3px" onclick="deleteLead('${l.place_id}')">Delete</button>
+        <td>
+          <div class="action-row">
+            <button class="icon-btn" title="Sales script" onclick="showSalesScript('${l.place_id}')">📝</button>
+            <button class="icon-btn" title="History" onclick="showLeadHistory('${l.place_id}')">🕘</button>
+            <button class="icon-btn" title="${l.assigned_to===_myName?'Release this lead':'Claim this lead'}" onclick="claimLead('${l.place_id}')">${l.assigned_to===_myName?'✋':'🙋'}</button>
+            <button class="icon-btn danger" title="Delete lead" onclick="deleteLead('${l.place_id}')">🗑</button>
+          </div>
         </td>
       </tr>`;
     }).join('')}
@@ -1072,10 +1130,7 @@ function exportCSV(){
 // ── Settings panel ──
 function toggleSettings(){
   const p=document.getElementById('settingsPanel');
-  const open=p.style.display==='flex';
-  p.style.display=open?'none':'flex';
-  document.getElementById('settingsBtn').style.background=open?'':'var(--accent)';
-  document.getElementById('settingsBtn').style.color=open?'':'#fff';
+  p.style.display = p.style.display==='flex' ? 'none' : 'flex';
 }
 document.getElementById('rapidApiKeyInput').addEventListener('input', async function(){
   const key = this.value.trim();
