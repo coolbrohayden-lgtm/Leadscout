@@ -249,6 +249,14 @@ tr:hover td{background:rgba(108,99,255,.04);}
 .tag-add{background:transparent;border:1px dashed var(--border);border-radius:20px;padding:1.5px 8px;font-size:9.5px;font-weight:600;color:var(--muted2);cursor:pointer;font-family:inherit;transition:all .15s;}
 .tag-add:hover{border-color:var(--accent);color:var(--accent-hover);}
 
+/* Tag picker popover */
+.tag-picker-pop{position:absolute;z-index:9999;background:var(--surface2);border:1px solid var(--border-light);border-radius:10px;padding:6px;min-width:160px;max-width:240px;box-shadow:0 8px 28px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:2px;}
+.tag-pick-item{background:none;border:none;text-align:left;padding:7px 11px;border-radius:6px;font-size:12px;font-weight:500;color:var(--text);cursor:pointer;font-family:inherit;transition:background .1s;}
+.tag-pick-item:hover{background:var(--surface3);}
+.tag-pick-item.already{color:var(--muted);cursor:default;}
+.tag-pick-item.custom{color:var(--accent);}
+.tag-pick-divider{height:1px;background:var(--border);margin:3px 0;}
+
 /* Bulk selection */
 .row-chk,.select-all-chk{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;}
 .bulk-bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border-light);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow-lg);z-index:250;}
@@ -296,6 +304,15 @@ tr:hover td{background:rgba(108,99,255,.04);}
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Resend API Key (auto-email)<input id="resendKeyInput" type="password" placeholder="re_..." style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Email From Address<input id="resendFromInput" placeholder="You <you@yourdomain.com>" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
     <button class="btn btn-p" style="align-self:flex-end" onclick="saveEmailSettings()">Save Email Settings</button>
+  </div>
+  <div id="presetTagsPanel" style="display:none;padding:10px 16px 14px;background:var(--surface);border-bottom:1px solid var(--border);gap:10px;flex-direction:column">
+    <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Preset Tags</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:-4px">Define tags your team can apply with one click. Separate with commas.</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="presetTagsInput" placeholder="Hot lead, Follow up, Left voicemail, Closed, Not interested…" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:inherit;padding:7px 12px;outline:none;flex:1;min-width:260px;transition:border .15s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"/>
+      <button class="btn btn-p" onclick="savePresetTags()">Save</button>
+    </div>
+    <div id="presetTagPreview" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:2px"></div>
   </div>
   <div id="pendingPanel" style="display:none;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-direction:column;gap:8px">
     <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Accounts awaiting approval</div>
@@ -549,12 +566,14 @@ function setBizFilter(type) {
 }
 
 // ── Tags ──
+window._presetTags = [];
+
 function tagList(l){ return (l.tags||'').split(',').map(t=>t.trim()).filter(Boolean); }
 
 function tagsHtml(l){
   const tags = tagList(l);
   const pills = tags.map(t=>`<span class="tag-pill">${t}<span class="x" onclick="event.stopPropagation();removeTag('${l.place_id}','${t.replace(/'/g,"\\'")}')">✕</span></span>`).join('');
-  return `${pills}<button class="tag-add" onclick="event.stopPropagation();addTag('${l.place_id}')">+ tag</button>`;
+  return `${pills}<button class="tag-add" onclick="event.stopPropagation();showTagPicker('${l.place_id}',this)">+ tag</button>`;
 }
 
 async function saveTags(placeId, tags){
@@ -568,7 +587,42 @@ async function saveTags(placeId, tags){
   render();
 }
 
-async function addTag(placeId){
+function showTagPicker(placeId, anchor){
+  // Remove any existing picker
+  document.querySelectorAll('.tag-picker-pop').forEach(el=>el.remove());
+  const presets = window._presetTags;
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  const existing = lead ? tagList(lead) : [];
+  // If no presets, just prompt
+  if(!presets.length){ addTagCustom(placeId); return; }
+  const pop = document.createElement('div');
+  pop.className = 'tag-picker-pop';
+  pop.innerHTML = presets.map(t=>{
+    const already = existing.includes(t);
+    return `<button class="tag-pick-item${already?' already':''}" onclick="pickPresetTag('${placeId}','${t.replace(/'/g,"\\'")}')">${t}${already?' ✓':''}</button>`;
+  }).join('') + `<div class="tag-pick-divider"></div><button class="tag-pick-item custom" onclick="addTagCustom('${placeId}')">Custom tag…</button>`;
+  document.body.appendChild(pop);
+  const rect = anchor.getBoundingClientRect();
+  pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  pop.style.left = (rect.left + window.scrollX) + 'px';
+  // Close on outside click
+  setTimeout(()=>{
+    function close(e){ if(!pop.contains(e.target)){ pop.remove(); document.removeEventListener('click',close); } }
+    document.addEventListener('click', close);
+  }, 0);
+}
+
+async function pickPresetTag(placeId, tag){
+  document.querySelectorAll('.tag-picker-pop').forEach(el=>el.remove());
+  const lead = allLeads.find(l=>l.place_id===placeId);
+  if(!lead) return;
+  const tags = tagList(lead);
+  if(!tags.includes(tag)) tags.push(tag);
+  await saveTags(placeId, tags);
+}
+
+async function addTagCustom(placeId){
+  document.querySelectorAll('.tag-picker-pop').forEach(el=>el.remove());
   const t = prompt('Add a tag:');
   if(!t || !t.trim()) return;
   const lead = allLeads.find(l=>l.place_id===placeId);
@@ -576,6 +630,10 @@ async function addTag(placeId){
   const tags = tagList(lead);
   if(!tags.includes(t.trim())) tags.push(t.trim());
   await saveTags(placeId, tags);
+}
+
+async function addTag(placeId){
+  await addTagCustom(placeId);
 }
 
 async function removeTag(placeId, tag){
@@ -1280,9 +1338,19 @@ async function bulkSetStatus(status){
 }
 
 async function bulkAddTag(){
-  const t = prompt(`Add a tag to ${selectedIds.size} selected lead(s):`);
-  if(!t || !t.trim()) return;
-  const tag = t.trim();
+  const presets = window._presetTags;
+  let tag;
+  if(presets.length){
+    const opts = presets.map((t,i)=>`${i+1}. ${t}`).join('\n');
+    const raw = prompt(`Tag ${selectedIds.size} lead(s).\n\nPreset tags:\n${opts}\n\nType a number to use a preset, or type any custom tag:`);
+    if(!raw || !raw.trim()) return;
+    const num = parseInt(raw.trim());
+    tag = (!isNaN(num) && num >= 1 && num <= presets.length) ? presets[num-1] : raw.trim();
+  } else {
+    const t = prompt(`Add a tag to ${selectedIds.size} selected lead(s):`);
+    if(!t || !t.trim()) return;
+    tag = t.trim();
+  }
   const ids = [...selectedIds];
   for(const id of ids){
     const lead = allLeads.find(l=>l.place_id===id);
@@ -1438,7 +1506,36 @@ async function importCSVFile(file){
 // ── Settings panel ──
 function toggleSettings(){
   const p=document.getElementById('settingsPanel');
-  p.style.display = p.style.display==='flex' ? 'none' : 'flex';
+  const pt=document.getElementById('presetTagsPanel');
+  const open = p.style.display!=='flex';
+  p.style.display = open ? 'flex' : 'none';
+  pt.style.display = open ? 'flex' : 'none';
+}
+
+async function savePresetTags(){
+  const raw = document.getElementById('presetTagsInput').value;
+  const tags = raw.split(',').map(t=>t.trim()).filter(Boolean);
+  window._presetTags = tags;
+  renderPresetTagPreview();
+  const {error} = await supabaseClient.from('shared_settings').update({preset_tags: JSON.stringify(tags)}).eq('id',1);
+  if(error){ showToast('❌ Save failed — add preset_tags (text) column to shared_settings in Supabase'); console.error(error); return; }
+  showToast('✅ Preset tags saved');
+}
+
+function renderPresetTagPreview(){
+  const el = document.getElementById('presetTagPreview');
+  if(!el) return;
+  el.innerHTML = window._presetTags.map(t=>`<span class="tag-pill" style="cursor:default">${t}</span>`).join('');
+}
+
+async function loadPresetTags(){
+  try{
+    const {data} = await supabaseClient.from('shared_settings').select('preset_tags').eq('id',1).single();
+    window._presetTags = JSON.parse(data?.preset_tags || '[]');
+  }catch(e){ window._presetTags = []; }
+  const input = document.getElementById('presetTagsInput');
+  if(input) input.value = window._presetTags.join(', ');
+  renderPresetTagPreview();
 }
 document.getElementById('rapidApiKeyInput').addEventListener('input', async function(){
   const key = this.value.trim();
@@ -2699,6 +2796,7 @@ function togglePendingPanel(){
     });
   }
 
+  await loadPresetTags();
   await load();
   _lastRefresh = Date.now();
 })();
