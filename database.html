@@ -266,6 +266,7 @@ tr:hover td{background:rgba(108,99,255,.04);}
     <div class="menu-wrap">
       <button class="btn" onclick="toggleHdrMenu(event)" title="More actions">⋯</button>
       <div class="menu-pop" id="hdrMenu">
+        <button class="menu-item" onclick="toggleHdrMenu();document.getElementById('importFileInput').click()">Import CSV (GoHighLevel)</button>
         <button class="menu-item" id="settingsBtn" onclick="toggleHdrMenu();toggleSettings()" style="display:none">Settings</button>
         <button class="menu-item" onclick="toggleHdrMenu();clearDenied()">Clear denied leads</button>
         <button class="menu-item danger" onclick="toggleHdrMenu();clearAll()">Clear all leads</button>
@@ -416,6 +417,7 @@ tr:hover td{background:rgba(108,99,255,.04);}
     </div>
   </div>
 </div>
+<input type="file" id="importFileInput" accept=".csv,text/csv" style="display:none" onchange="importCSVFile(this.files[0]);this.value=''"/>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1146,6 +1148,130 @@ function exportCSV(){
   a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
   a.download=`leadscout_${ts}.csv`; a.click();
   markExported(leads.map(l=>l.place_id)).then(()=>render()); // refresh to show checkmarks
+}
+
+// ── CSV import (GoHighLevel contact exports + LeadScout exports) ──
+function parseCSV(text){
+  const rows=[]; let row=[], field='', inQuotes=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQuotes){
+      if(c==='"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQuotes=false; }
+      else field+=c;
+    } else {
+      if(c==='"') inQuotes=true;
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n'||c==='\r'){
+        if(c==='\r'&&text[i+1]==='\n') i++;
+        row.push(field); field='';
+        if(row.length>1||row[0]!=='') rows.push(row);
+        row=[];
+      }
+      else field+=c;
+    }
+  }
+  if(field!==''||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+// Deterministic id so re-importing the same file updates instead of duplicating
+function importHash(str){
+  let h=5381;
+  for(let i=0;i<str.length;i++) h=((h<<5)+h+str.charCodeAt(i))>>>0;
+  return h.toString(36);
+}
+
+async function importCSVFile(file){
+  if(!file) return;
+  const text = await file.text();
+  const rows = parseCSV(text);
+  if(rows.length<2){ showToast('CSV appears to be empty'); return; }
+
+  const headers = rows[0].map(h=>h.toLowerCase().trim());
+  const col = (...names)=>{ for(const n of names){ const i=headers.indexOf(n); if(i!==-1) return i; } return -1; };
+
+  // Column detection: GoHighLevel export names first, then LeadScout export names
+  const iFirst   = col('first name','firstname');
+  const iLast    = col('last name','lastname');
+  const iName    = col('business name','company name','contact name','name','title');
+  const iPhone   = col('phone','phone number','mobile');
+  const iEmail   = col('email','email address');
+  const iStreet  = col('address','address 1','street address','street');
+  const iCity    = col('city');
+  const iState   = col('state','state/province');
+  const iWebsite = col('website','website url');
+  const iIG      = col('instagram','instagram url','ig','instagram handle');
+  const iNotes   = col('notes','note');
+  const iTags    = col('tags','tag');
+  const iValue   = col('opportunity value','lead value','deal value','dealvalue','value');
+  const iStage   = col('pipeline stage','stage','opportunity status','status');
+  const iOwnerN  = col('ownername','owner name');
+  const iOwnerP  = col('ownerphone','owner phone');
+  const iOwnerE  = col('owneremail','owner email');
+
+  if(iName===-1 && iFirst===-1){ showToast('Could not find a name column in this CSV'); return; }
+
+  const STAGE_MAP = [
+    [/won|customer|client|signed|closed.?won/i, 'signed'],
+    [/lost|dead|denied|unqualified|closed.?lost|do not/i, 'denied'],
+    [/interested|qualified|appointment|booked|demo|meeting|proposal|negotiat/i, 'interested'],
+    [/contact|attempt|follow|reached|called|emailed|messaged|engaged/i, 'contacted'],
+  ];
+
+  const leads=[];
+  for(let r=1;r<rows.length;r++){
+    const g=(i)=>i>=0?(rows[r][i]||'').trim():'';
+    let name = g(iName);
+    if(!name){ name = `${g(iFirst)} ${g(iLast)}`.trim(); }
+    if(!name) continue;
+
+    let instagram = g(iIG);
+    const igm = instagram.match(/instagram\.com\/([A-Za-z0-9._]{2,30})/);
+    if(igm) instagram = igm[1];
+    instagram = instagram.replace(/^@/,'') || null;
+
+    let status='new';
+    const rawStage=g(iStage);
+    for(const [re,st] of STAGE_MAP){ if(re.test(rawStage)){ status=st; break; } }
+
+    const addressParts=[g(iStreet),g(iCity),g(iState)].filter(Boolean);
+    const notesParts=[g(iNotes),g(iTags)?`tags: ${g(iTags)}`:''].filter(Boolean);
+    const rawValue=g(iValue).replace(/[$,]/g,'');
+
+    leads.push({
+      place_id: 'imp_'+importHash(name.toLowerCase()+'|'+g(iPhone)+'|'+g(iStreet).toLowerCase()),
+      name,
+      phone: g(iPhone)||null,
+      business_email: g(iEmail)||null,
+      address: addressParts.join(', ')||null,
+      website: g(iWebsite)||null,
+      instagram,
+      notes: notesParts.join(' — ')||null,
+      deal_value: rawValue&&!isNaN(parseFloat(rawValue))?parseFloat(rawValue):null,
+      status,
+      owner_name: g(iOwnerN)||null,
+      owner_phone: g(iOwnerP)||null,
+      owner_email: g(iOwnerE)||null,
+      score: 0,
+      label: null,
+      business_type: 'restaurant',
+      scanned_at: Date.now(),
+    });
+  }
+
+  if(!leads.length){ showToast('No usable rows found in this CSV'); return; }
+  if(!confirm(`Import ${leads.length} lead(s) from ${file.name}? Re-importing the same file updates existing rows instead of duplicating.`)) return;
+
+  showToast(`Importing ${leads.length} leads…`);
+  let ok=0, failed=0;
+  for(let i=0;i<leads.length;i+=100){
+    const batch=leads.slice(i,i+100);
+    const {error}=await supabaseClient.from('leads').upsert(batch,{onConflict:'place_id'});
+    if(error){ console.error('import batch', error); failed+=batch.length; }
+    else ok+=batch.length;
+  }
+  showToast(failed?`Imported ${ok}, ${failed} failed — see console`:`✓ Imported ${ok} leads`);
+  await load();
 }
 
 // ── Settings panel ──
