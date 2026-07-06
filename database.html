@@ -10,16 +10,16 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --bg:#0a0c10;--surface:#111419;--surface2:#181c24;--surface3:#1f2430;
-  --card:#111419;--border:#232936;--border-light:#2e3646;
-  --text:#e8ecf1;--muted:#8b93a1;--muted2:#5c6470;
-  --accent:#6c63ff;--accent-soft:rgba(108,99,255,.12);--accent-hover:#7d75ff;
-  --hot:#ff6b6b;--warm:#f5a623;--cold:#3fdd8d;
+  --bg:#0b0c0e;--surface:#101114;--surface2:#16181c;--surface3:#1d2025;
+  --card:#101114;--border:#24272e;--border-light:#31353e;
+  --text:#e7e9ee;--muted:#8a8f98;--muted2:#5e646e;
+  --accent:#5e6ad2;--accent-soft:rgba(94,106,210,.15);--accent-hover:#7c87e0;
+  --hot:#f47067;--warm:#f2a33c;--cold:#3dd68c;
   --radius:10px;--radius-sm:7px;
   --shadow-sm:0 1px 3px rgba(0,0,0,.3);
   --shadow-md:0 4px 16px rgba(0,0,0,.35);
   --shadow-lg:0 16px 48px rgba(0,0,0,.55);
-  --focus-ring:0 0 0 3px rgba(108,99,255,.25);
+  --focus-ring:0 0 0 3px rgba(94,106,210,.28);
 }
 html{scrollbar-color:var(--surface3) var(--bg);}
 ::-webkit-scrollbar{width:10px;height:10px;}
@@ -31,7 +31,9 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
 
 /* Header */
 header{background:rgba(17,20,25,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;}
-.logo{font-size:16px;font-weight:800;letter-spacing:-.02em;}.logo span{background:linear-gradient(135deg,var(--accent),#9c8cff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.logo{font-size:15px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;}
+.logo::before{content:'';width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#8b96e8);box-shadow:0 2px 8px rgba(94,106,210,.4);}
+.logo span{color:var(--accent-hover);}
 .back-btn{font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);transition:all .15s;}
 .back-btn:hover{color:var(--text);border-color:var(--border-light);background:var(--surface2);}
 .hdr-right{margin-left:auto;display:flex;gap:8px;align-items:center;}
@@ -45,16 +47,16 @@ header{background:rgba(17,20,25,.85);backdrop-filter:blur(12px);border-bottom:1p
 .btn-danger{background:rgba(255,107,107,.08);border-color:rgba(255,107,107,.35);color:var(--hot);}
 .btn-danger:hover{background:rgba(255,107,107,.16);border-color:var(--hot);}
 
-/* Stats bar */
-.stats-bar{display:flex;gap:10px;padding:18px 24px 14px;flex-wrap:wrap;}
-.stat-pill{background:linear-gradient(180deg,var(--surface2),var(--surface));border:1px solid var(--border);border-radius:var(--radius);padding:12px 20px;text-align:center;min-width:104px;box-shadow:var(--shadow-sm);transition:all .15s;}
-.stat-pill:hover{border-color:var(--border-light);transform:translateY(-1px);}
-.stat-pill .v{font-size:24px;font-weight:800;letter-spacing:-.03em;line-height:1.1;}
-.stat-pill .l{font-size:9.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-top:4px;}
+/* Stats strip */
+.stats-bar{display:flex;padding:16px 24px 12px;flex-wrap:wrap;row-gap:12px;}
+.stat-pill{background:transparent;border:none;border-left:1px solid var(--border);padding:2px 22px;text-align:left;min-width:0;}
+.stat-pill:first-child{border-left:none;padding-left:0;}
+.stat-pill .v{font-size:20px;font-weight:700;letter-spacing:-.02em;line-height:1.15;font-variant-numeric:tabular-nums;}
+.stat-pill .l{font-size:10px;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:2px;text-transform:none;}
 .stat-pill.hot .v{color:var(--hot);}
 .stat-pill.warm .v{color:var(--warm);}
 .stat-pill.cold .v{color:var(--cold);}
-.stat-pill.signed .v{color:var(--accent);}
+.stat-pill.signed .v{color:var(--accent-hover);}
 
 /* Controls */
 .controls{display:flex;gap:12px;padding:6px 24px 14px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap;}
@@ -116,15 +118,23 @@ td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
 tbody tr{transition:background .12s;}
 tbody tr:last-child td{border-bottom:none;}
 tr:hover td{background:rgba(108,99,255,.04);}
-.badge{font-size:9px;font-weight:700;padding:2.5px 8px;border-radius:20px;letter-spacing:.04em;}
-.badge-hot{background:rgba(255,107,107,.14);color:var(--hot);}
-.badge-warm{background:rgba(245,166,35,.14);color:var(--warm);}
-.badge-cold{background:rgba(63,221,141,.12);color:var(--cold);}
-.badge-new{background:var(--surface3);color:var(--muted);}
-.badge-contacted{background:var(--accent-soft);color:#a09aff;}
-.badge-interested{background:rgba(245,166,35,.12);color:var(--warm);}
-.badge-signed{background:rgba(63,221,141,.12);color:var(--cold);}
-.badge-denied{background:rgba(120,120,130,.12);color:#8a919d;}
+.badge{font-size:10px;font-weight:600;padding:1px 0;border-radius:0;letter-spacing:.01em;display:inline-flex;align-items:center;gap:5px;background:transparent!important;}
+.badge::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.badge-hot{color:var(--hot);}
+.badge-warm{color:var(--warm);}
+.badge-cold{color:var(--cold);}
+.badge-new{color:var(--muted);}
+.badge-contacted{color:var(--accent-hover);}
+.badge-interested{color:var(--warm);}
+.badge-signed{color:var(--cold);}
+.badge-denied{color:#71767f;}
+
+/* Business monogram avatar */
+.avatar{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;background:var(--surface3);color:var(--muted);border:1px solid var(--border);}
+.avatar.av-hot{background:rgba(244,112,103,.14);color:var(--hot);border-color:rgba(244,112,103,.3);}
+.avatar.av-warm{background:rgba(242,163,60,.13);color:var(--warm);border-color:rgba(242,163,60,.3);}
+.avatar.av-cold{background:rgba(61,214,140,.11);color:var(--cold);border-color:rgba(61,214,140,.28);}
+.name-cell{display:flex;gap:10px;align-items:flex-start;}
 
 /* Social pills */
 .pill{display:inline-flex;align-items:center;gap:4px;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:600;text-decoration:none;margin:1px;transition:all .15s;}
@@ -135,9 +145,13 @@ tr:hover td{background:rgba(108,99,255,.04);}
 .pill-dim{opacity:.35;}
 
 /* Status select */
-.status-sel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;font-family:inherit;padding:4px 7px;cursor:pointer;outline:none;transition:all .15s;}
+.status-sel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;font-weight:500;font-family:inherit;padding:4px 7px;cursor:pointer;outline:none;transition:all .15s;}
 .status-sel:hover{border-color:var(--border-light);}
 .status-sel:focus{border-color:var(--accent);}
+.status-sel.st-contacted{color:var(--accent-hover);border-color:rgba(94,106,210,.4);}
+.status-sel.st-interested{color:var(--warm);border-color:rgba(242,163,60,.35);}
+.status-sel.st-signed{color:var(--cold);border-color:rgba(61,214,140,.35);}
+.status-sel.st-denied{color:#71767f;}
 
 /* Notes */
 .notes-input{background:transparent;border:none;border-bottom:1px dashed var(--border);color:var(--text);font-size:11px;font-family:inherit;width:140px;outline:none;padding:3px 0;transition:border-color .15s;}
@@ -231,7 +245,8 @@ tr:hover td{background:rgba(108,99,255,.04);}
 /* Compact icon action buttons in table rows */
 .icon-btn{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--muted);font-size:12px;cursor:pointer;transition:all .15s;padding:0;}
 .icon-btn:hover{border-color:var(--border-light);color:var(--text);background:var(--surface3);}
-.icon-btn.danger:hover{border-color:var(--hot);color:var(--hot);background:rgba(255,107,107,.08);}
+.icon-btn.danger:hover{border-color:var(--hot);color:var(--hot);background:rgba(244,112,103,.08);}
+.icon-btn.claimed{border-color:var(--accent);color:var(--accent-hover);background:var(--accent-soft);}
 .action-row{display:flex;gap:4px;align-items:center;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -245,15 +260,15 @@ tr:hover td{background:rgba(108,99,255,.04);}
   <div class="hdr-right">
     <button class="btn" onclick="toggleAutoRefresh()" style="display:flex;align-items:center;gap:6px"><span id="refreshDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block"></span>Live</button>
     <span id="refreshBadge" style="font-size:10px;color:var(--cold);opacity:0;transition:opacity .4s"></span>
-    <button class="btn" onclick="toggleActivityPanel()">🕘 Activity</button>
-    <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">👤 Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
-    <button class="btn btn-p" onclick="exportCSV()">⬇ Export CSV</button>
+    <button class="btn" onclick="toggleActivityPanel()">Activity</button>
+    <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
+    <button class="btn btn-p" onclick="exportCSV()">Export CSV</button>
     <div class="menu-wrap">
       <button class="btn" onclick="toggleHdrMenu(event)" title="More actions">⋯</button>
       <div class="menu-pop" id="hdrMenu">
-        <button class="menu-item" id="settingsBtn" onclick="toggleHdrMenu();toggleSettings()" style="display:none">⚙️ Settings</button>
-        <button class="menu-item" onclick="toggleHdrMenu();clearDenied()">Clear Denied</button>
-        <button class="menu-item danger" onclick="toggleHdrMenu();clearAll()">🗑 Clear All Leads</button>
+        <button class="menu-item" id="settingsBtn" onclick="toggleHdrMenu();toggleSettings()" style="display:none">Settings</button>
+        <button class="menu-item" onclick="toggleHdrMenu();clearDenied()">Clear denied leads</button>
+        <button class="menu-item danger" onclick="toggleHdrMenu();clearAll()">Clear all leads</button>
       </div>
     </div>
     <span class="hdr-sep"></span>
@@ -281,11 +296,11 @@ tr:hover td{background:rgba(108,99,255,.04);}
 
 <div class="controls">
   <div class="view-toggle">
-    <button id="viewTableBtn" class="active" onclick="setView('table')">📋 Table</button>
-    <button id="viewPipeBtn" onclick="setView('pipeline')">📊 Pipeline</button>
+    <button id="viewTableBtn" class="active" onclick="setView('table')">Table</button>
+    <button id="viewPipeBtn" onclick="setView('pipeline')">Pipeline</button>
   </div>
-  <input class="search-box" id="searchBox" placeholder="Search by name, address, notes…" oninput="render()"/>
-  <button class="btn" id="filtersBtn" onclick="toggleFilters()">☰ Filters<span id="filterCountBadge" class="filter-count" style="display:none"></span></button>
+  <input class="search-box" id="searchBox" placeholder="Search leads…" oninput="render()"/>
+  <button class="btn" id="filtersBtn" onclick="toggleFilters()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:5px"><path d="M22 3H2l8 9.5V21l4-2v-6.5L22 3z"/></svg>Filters<span id="filterCountBadge" class="filter-count" style="display:none"></span></button>
   <select class="sort-sel" id="locationSel" onchange="render()">
     <option value="">📍 All locations</option>
   </select>
@@ -310,19 +325,19 @@ tr:hover td{background:rgba(108,99,255,.04);}
   <div class="filter-chips">
     <span class="filter-label">Label</span>
     <button class="fchip active" data-f="all" onclick="setFilter('all')">All</button>
-    <button class="fchip fc-hot"  data-f="HOT"  onclick="setFilter('HOT')">🔥 HOT</button>
-    <button class="fchip fc-warm" data-f="WARM" onclick="setFilter('WARM')">WARM</button>
-    <button class="fchip fc-cold" data-f="COLD" onclick="setFilter('COLD')">COLD</button>
+    <button class="fchip fc-hot"  data-f="HOT"  onclick="setFilter('HOT')">Hot</button>
+    <button class="fchip fc-warm" data-f="WARM" onclick="setFilter('WARM')">Warm</button>
+    <button class="fchip fc-cold" data-f="COLD" onclick="setFilter('COLD')">Cold</button>
   </div>
   <div class="filter-chips">
     <span class="filter-label">Status</span>
-    <button class="fchip" data-f="new"        onclick="setFilter('new')">🆕 New</button>
-    <button class="fchip fc-signed"   data-f="signed"    onclick="setFilter('signed')">✅ Signed</button>
-    <button class="fchip"             data-f="contacted" onclick="setFilter('contacted')">📞 Contacted</button>
-    <button class="fchip"             data-f="interested" onclick="setFilter('interested')">👀 Interested</button>
-    <button class="fchip fc-denied"   data-f="denied"    onclick="setFilter('denied')">🚫 Denied</button>
-    <button class="fchip"             data-f="mine"      onclick="setFilter('mine')">🙋 Mine</button>
-    <button class="fchip"             data-f="followup_due" onclick="setFilter('followup_due')">⏰ Due</button>
+    <button class="fchip" data-f="new"        onclick="setFilter('new')">New</button>
+    <button class="fchip fc-signed"   data-f="signed"    onclick="setFilter('signed')">Signed</button>
+    <button class="fchip"             data-f="contacted" onclick="setFilter('contacted')">Contacted</button>
+    <button class="fchip"             data-f="interested" onclick="setFilter('interested')">Interested</button>
+    <button class="fchip fc-denied"   data-f="denied"    onclick="setFilter('denied')">Denied</button>
+    <button class="fchip"             data-f="mine"      onclick="setFilter('mine')">Mine</button>
+    <button class="fchip"             data-f="followup_due" onclick="setFilter('followup_due')">Due for follow-up</button>
   </div>
   <div class="filter-chips" id="bizTypeFilterRow">
     <span class="filter-label">Type</span>
@@ -623,14 +638,14 @@ function renderStats(){
   const pipelineValue=allLeads.filter(l=>l.status!=='denied').reduce((sum,l)=>sum+(Number(l.deal_value)||0),0);
   const dueCount=allLeads.filter(l=>{const st=followupStatus(l); return st==='overdue'||st==='today';}).length;
   s.innerHTML=`
-    <div class="stat-pill"><div class="v">${total}</div><div class="l">Total</div></div>
-    <div class="stat-pill hot"><div class="v">${hot}</div><div class="l">HOT</div></div>
-    <div class="stat-pill warm"><div class="v">${warm}</div><div class="l">WARM</div></div>
-    <div class="stat-pill cold"><div class="v">${cold}</div><div class="l">COLD</div></div>
+    <div class="stat-pill"><div class="v">${total}</div><div class="l">Total leads</div></div>
+    <div class="stat-pill hot"><div class="v">${hot}</div><div class="l">Hot</div></div>
+    <div class="stat-pill warm"><div class="v">${warm}</div><div class="l">Warm</div></div>
+    <div class="stat-pill cold"><div class="v">${cold}</div><div class="l">Cold</div></div>
     <div class="stat-pill signed"><div class="v">${signed}</div><div class="l">Signed</div></div>
-    <div class="stat-pill"><div class="v">${contacted}</div><div class="l">In Progress</div></div>
-    <div class="stat-pill" style="cursor:default"><div class="v" style="color:var(--cold)">${fmtMoney(pipelineValue)}</div><div class="l">Pipeline Value</div></div>
-    <div class="stat-pill" style="cursor:pointer" onclick="setFilter('followup_due')" title="Click to filter"><div class="v" style="color:${dueCount?'var(--warm)':'var(--muted)'}">${dueCount}</div><div class="l">Due Today</div></div>
+    <div class="stat-pill"><div class="v">${contacted}</div><div class="l">In progress</div></div>
+    <div class="stat-pill"><div class="v" style="color:var(--cold)">${fmtMoney(pipelineValue)}</div><div class="l">Pipeline value</div></div>
+    <div class="stat-pill" style="cursor:pointer" onclick="setFilter('followup_due')" title="Click to filter"><div class="v" style="color:${dueCount?'var(--warm)':'var(--muted2)'}">${dueCount}</div><div class="l">Due today</div></div>
   `;
 }
 
@@ -684,13 +699,21 @@ function render(){
       const bizIcon = BIZ_ICONS[bizType] || '🏢';
       const bizLabel = bizType.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
       const wasExported = !!l.exported_at;
+      const initials = (l.name||'?').replace(/[^A-Za-z0-9 ]/g,'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?';
       return `<tr id="row-${l.place_id}"${wasExported?' style="opacity:0.6"':''}>
         <td>
-          <div style="font-weight:600">${l.name}${wasExported?' <span title="Already exported" style="color:#4ade80;font-size:11px">✓</span>':''}</div>
-          <span class="badge badge-${(l.label||'cold').toLowerCase()}">${l.label||'?'}</span>
-          <span style="font-size:9px;color:var(--muted);margin-left:4px">${bizIcon} ${bizLabel}</span>
-          ${l.assigned_to?`<div style="font-size:9px;color:var(--accent);margin-top:2px">🙋 ${l.assigned_to}</div>`:''}
-          ${scanDate?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${scanDate}</div>`:''}
+          <div class="name-cell">
+            <div class="avatar av-${(l.label||'cold').toLowerCase()}" title="${l.label||''}">${initials}</div>
+            <div>
+              <div style="font-weight:600">${l.name}${wasExported?' <span title="Already exported" style="color:var(--cold);font-size:11px">✓</span>':''}</div>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:2px">
+                <span class="badge badge-${(l.label||'cold').toLowerCase()}">${(l.label||'?').charAt(0)+(l.label||'?').slice(1).toLowerCase()}</span>
+                <span style="font-size:10px;color:var(--muted2)">${bizLabel}</span>
+              </div>
+              ${l.assigned_to?`<div style="font-size:10px;color:var(--accent-hover);margin-top:2px">${l.assigned_to}</div>`:''}
+              ${scanDate?`<div style="font-size:9.5px;color:var(--muted2);margin-top:2px">${scanDate}</div>`:''}
+            </div>
+          </div>
         </td>
         <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
         <td style="white-space:nowrap">
@@ -702,13 +725,13 @@ function render(){
         <td><input class="value-input" type="number" min="0" step="1" value="${l.deal_value||''}" placeholder="$0" onblur="saveDealValue('${l.place_id}',this.value)"/></td>
         <td>${ig}${tt}${fb}</td>
         <td>
-          <select class="status-sel badge badge-${status}" onchange="setStatus('${l.place_id}',this.value)">
+          <select class="status-sel st-${status}" onchange="setStatus('${l.place_id}',this.value)">
             <option value="new"        ${status==='new'       ?'selected':''}>New</option>
-            <option value="contacted"  ${status==='contacted' ?'selected':''}>📞 Contacted</option>
-            <option value="interested" ${status==='interested'?'selected':''}>👀 Interested</option>
-            <option value="signed"     ${status==='signed'    ?'selected':''}>✅ Signed</option>
-            <option value="denied"     ${status==='denied'    ?'selected':''}>🚫 Denied</option>
-            ${customStages.map(s=>`<option value="${s.id}" ${status===s.id?'selected':''}>${s.icon||'📁'} ${s.title}</option>`).join('')}
+            <option value="contacted"  ${status==='contacted' ?'selected':''}>Contacted</option>
+            <option value="interested" ${status==='interested'?'selected':''}>Interested</option>
+            <option value="signed"     ${status==='signed'    ?'selected':''}>Signed</option>
+            <option value="denied"     ${status==='denied'    ?'selected':''}>Denied</option>
+            ${customStages.map(s=>`<option value="${s.id}" ${status===s.id?'selected':''}>${s.title}</option>`).join('')}
           </select>
         </td>
         <td style="white-space:nowrap">
@@ -718,10 +741,10 @@ function render(){
         <td><input class="notes-input" value="${(l.notes||'').replace(/"/g,'&quot;')}" placeholder="Add notes…" onblur="saveNotes('${l.place_id}',this.value)"/></td>
         <td>
           <div class="action-row">
-            <button class="icon-btn" title="Sales script" onclick="showSalesScript('${l.place_id}')">📝</button>
-            <button class="icon-btn" title="History" onclick="showLeadHistory('${l.place_id}')">🕘</button>
-            <button class="icon-btn" title="${l.assigned_to===_myName?'Release this lead':'Claim this lead'}" onclick="claimLead('${l.place_id}')">${l.assigned_to===_myName?'✋':'🙋'}</button>
-            <button class="icon-btn danger" title="Delete lead" onclick="deleteLead('${l.place_id}')">🗑</button>
+            <button class="icon-btn" title="Sales script" onclick="showSalesScript('${l.place_id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></button>
+            <button class="icon-btn" title="History" onclick="showLeadHistory('${l.place_id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
+            <button class="icon-btn${l.assigned_to===_myName?' claimed':''}" title="${l.assigned_to===_myName?'Release this lead':'Claim this lead'}" onclick="claimLead('${l.place_id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
+            <button class="icon-btn danger" title="Delete lead" onclick="deleteLead('${l.place_id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
           </div>
         </td>
       </tr>`;
@@ -742,11 +765,11 @@ function setView(v){
 }
 
 const PIPE_STAGES=[
-  {id:'new',        title:'🆕 New',        color:'#7d8590', builtin:true},
-  {id:'contacted',  title:'📞 Contacted',  color:'#6c63ff', builtin:true},
-  {id:'interested', title:'👀 Interested', color:'#f5a623', builtin:true},
-  {id:'signed',     title:'✅ Signed',     color:'#4ade80', builtin:true},
-  {id:'denied',     title:'🚫 Denied',     color:'#555',    builtin:true},
+  {id:'new',        title:'New',        color:'#8a8f98', builtin:true},
+  {id:'contacted',  title:'Contacted',  color:'#5e6ad2', builtin:true},
+  {id:'interested', title:'Interested', color:'#f2a33c', builtin:true},
+  {id:'signed',     title:'Signed',     color:'#3dd68c', builtin:true},
+  {id:'denied',     title:'Denied',     color:'#565c68', builtin:true},
 ];
 
 // ── Custom stages (shared with the team via shared_settings.pipeline_stages) ──
@@ -908,23 +931,21 @@ function runStageAction(stage, lead){
 }
 
 function pipeCard(l){
-  const BIZ_ICONS={restaurant:'🍽️',spa:'💆',hair_salon:'✂️',nail_salon:'💅',gym:'🏋️',yoga_studio:'🧘',dentist:'🦷',cafe:'☕',bar:'🍺',barber_shop:'💈',lodging:'🏨',car_wash:'🚗'};
-  const icon=BIZ_ICONS[l.business_type||'restaurant']||'🏢';
   const ig=l.instagram?`<a class="pill pill-ig" href="https://instagram.com/${l.instagram}" target="_blank">${igSvg()} @${l.instagram}${l.ig_followers?` · ${fmtFollowers(l.ig_followers)}`:''}</a>`:'';
   const tt=l.tiktok?`<a class="pill pill-tt" href="https://tiktok.com/@${l.tiktok}" target="_blank">${ttSvg()} @${l.tiktok}${l.tt_followers?` · ${fmtFollowers(l.tt_followers)}`:''}</a>`:'';
-  const label=l.label?`<span class="badge badge-${(l.label||'cold').toLowerCase()}">${l.label}</span>`:'';
-  const notes=l.notes?`<span style="font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;display:inline-block" title="${(l.notes||'').replace(/"/g,'&quot;')}">💬 ${l.notes}</span>`:'';
-  const value=l.deal_value?`<span style="font-weight:700;color:var(--cold)">${fmtMoney(l.deal_value)}</span>`:'';
+  const label=l.label?`<span class="badge badge-${(l.label||'cold').toLowerCase()}">${(l.label).charAt(0)+(l.label).slice(1).toLowerCase()}</span>`:'';
+  const notes=l.notes?`<span style="font-size:9.5px;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;display:inline-block;margin-left:auto" title="${(l.notes||'').replace(/"/g,'&quot;')}">${l.notes}</span>`:'';
+  const value=l.deal_value?`<span style="font-weight:600;color:var(--cold)">${fmtMoney(l.deal_value)}</span>`:'';
   const fb=followupBadge(l);
   return `<div class="pipe-card" draggable="true" ondragstart="pipeDragStart(event,'${l.place_id}')" ondragend="pipeDragEnd(event)">
-    <div class="nm">${icon} ${l.name} ${l.exported_at?'<span style="color:#4ade80;font-size:10px" title="Already exported">✓</span>':''}</div>
-    <div class="meta">${label} <span style="font-weight:700;color:var(--accent)">⭐ ${l.score||0}</span>${value?` · ${value}`:''}${l.phone?` · ${l.phone}`:''}${l.assigned_to?` · <span style="color:var(--accent)">🙋 ${l.assigned_to}</span>`:''}</div>
+    <div class="nm">${l.name} ${l.exported_at?'<span style="color:var(--cold);font-size:10px" title="Already exported">✓</span>':''}</div>
+    <div class="meta">${label}<span style="margin:0 6px;color:var(--muted2)">·</span><span style="font-weight:600;color:var(--muted)">${l.score||0} pts</span>${value?`<span style="margin:0 6px;color:var(--muted2)">·</span>${value}`:''}${l.assigned_to?`<span style="margin:0 6px;color:var(--muted2)">·</span><span style="color:var(--accent-hover)">${l.assigned_to}</span>`:''}</div>
     ${fb?`<div style="margin-bottom:4px">${fb}</div>`:''}
     <div class="socials">${ig}${tt}</div>
     <div class="foot">
-      <button class="btn" style="font-size:9px;padding:2px 7px" onclick="showSalesScript('${l.place_id}')">📝 Script</button>
-      <button class="btn" style="font-size:9px;padding:2px 7px" onclick="showLeadHistory('${l.place_id}')">🕘</button>
-      <button class="btn" style="font-size:9px;padding:2px 7px" onclick="claimLead('${l.place_id}')">${l.assigned_to===_myName?'✋':'🙋'}</button>
+      <button class="icon-btn" title="Sales script" onclick="showSalesScript('${l.place_id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg></button>
+      <button class="icon-btn" title="History" onclick="showLeadHistory('${l.place_id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
+      <button class="icon-btn${l.assigned_to===_myName?' claimed':''}" title="${l.assigned_to===_myName?'Release':'Claim'}" onclick="claimLead('${l.place_id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
       ${notes}
     </div>
   </div>`;
@@ -1268,7 +1289,7 @@ function followupStatus(l){
 function followupBadge(l){
   const st = followupStatus(l);
   if(!st || st==='upcoming') return '';
-  return `<span class="followup-badge ${st}">${st==='overdue'?'🔴 Overdue':'⏰ Due today'}</span>`;
+  return `<span class="followup-badge ${st}">${st==='overdue'?'Overdue':'Due today'}</span>`;
 }
 
 async function saveDealValue(placeId, value){
