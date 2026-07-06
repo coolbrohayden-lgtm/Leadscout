@@ -856,6 +856,7 @@ select:focus { border-color:var(--accent); }
   </aside>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="/auth.js"></script>
 <script>
@@ -1197,18 +1198,65 @@ function selectAllVisible(){
 
 // ── Population density overlay ──
 // Swaps the entire basemap to a real population density tile service.
-// Uses SEDAC GPW v4 (Columbia Univ / NASA) — actual census-based density raster.
-// Dark CartoDB base + population WMS + labels layer on top for readability.
+// US county-level population choropleth using Census 2020 data + us-atlas boundaries.
+// No tile server needed — pure GeoJSON rendered by Leaflet.
 
 let popLayerOn = false;
 let _popDarkBase = null;
-let _popWms     = null;
-let _popLabels  = null;
+let _popWms      = null;  // reused as the GeoJSON choropleth layer reference
+let _popLabels   = null;
+let _popGeoData  = null;  // cached after first load
 
-function togglePopLayer(){
+function _popColor(pop) {
+  // Log₁₀ scale: county pop ranges ~100 (tiny rural) to ~10M (LA/Cook)
+  // Bracket thresholds tuned so cities stand out clearly
+  if (pop > 1000000) return '#800026';
+  if (pop > 500000)  return '#BD0026';
+  if (pop > 200000)  return '#E31A1C';
+  if (pop > 100000)  return '#FC4E2A';
+  if (pop > 50000)   return '#FD8D3C';
+  if (pop > 20000)   return '#FEB24C';
+  if (pop > 5000)    return '#FED976';
+  return '#FFFFB2';
+}
+
+async function _buildPopLayer() {
+  if (!_popGeoData) {
+    const [topo, census] = await Promise.all([
+      fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json').then(r => r.json()),
+      fetch('https://api.census.gov/data/2020/dec/pl?get=P1_001N&for=county:*').then(r => r.json())
+    ]);
+
+    // Build FIPS → population lookup from Census API rows (row 0 is header)
+    const pop = {};
+    census.slice(1).forEach(([p, state, county]) => {
+      pop[state.padStart(2,'0') + county.padStart(3,'0')] = parseInt(p) || 0;
+    });
+
+    // Convert TopoJSON → GeoJSON and attach population
+    const geojson = topojson.feature(topo, topo.objects.counties);
+    geojson.features.forEach(f => {
+      const fips = String(f.id).padStart(5, '0');
+      f.properties._pop = pop[fips] || 0;
+    });
+    _popGeoData = geojson;
+  }
+
+  return L.geoJSON(_popGeoData, {
+    style: f => ({
+      fillColor: _popColor(f.properties._pop),
+      fillOpacity: 0.70,
+      weight: 0.5,
+      color: '#222',
+      opacity: 0.5
+    }),
+    interactive: false
+  });
+}
+
+async function togglePopLayer(){
   const btn = document.getElementById('popToggleBtn');
   if(popLayerOn){
-    // Restore OSM basemap
     if(_popWms)     { map.removeLayer(_popWms);     _popWms = null; }
     if(_popLabels)  { map.removeLayer(_popLabels);  _popLabels = null; }
     if(_popDarkBase){ map.removeLayer(_popDarkBase); _popDarkBase = null; }
@@ -1218,29 +1266,34 @@ function togglePopLayer(){
     btn.style.borderColor = '';
     btn.style.color = '';
   } else {
-    // Swap to population basemap
+    // Disable button while loading data
+    btn.textContent = 'Loading…';
+    btn.disabled = true;
+
     map.removeLayer(window._osmLayer);
 
-    // 1. Dark background so density colors pop
+    // Dark background so choropleth colors pop
     _popDarkBase = L.tileLayer(
       'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
       { attribution:'© CartoDB', maxZoom:19, subdomains:'abcd' }
     ).addTo(map);
 
-    // 2. NASA VIIRS nighttime lights — shows where people/cities are
-    // GIBS is CORS-enabled, no proxy or auth needed
-    _popWms = L.tileLayer(
-      'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_DayNightBand_At_Sensor_Radiance/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png',
-      { maxNativeZoom: 8, maxZoom: 19, opacity: 1.0, attribution: 'NASA VIIRS Nighttime Lights' }
-    ).addTo(map);
+    try {
+      // County choropleth — Census 2020 population, us-atlas boundaries
+      const layer = await _buildPopLayer();
+      _popWms = layer.addTo(map);
+    } catch(e) {
+      console.error('Population load failed:', e);
+    }
 
-    // 3. Labels layer on top so city names stay readable
+    // City labels on top
     _popLabels = L.tileLayer(
       'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
       { attribution:'', maxZoom:19, subdomains:'abcd', pane:'shadowPane' }
     ).addTo(map);
 
     popLayerOn = true;
+    btn.disabled = false;
     btn.textContent = 'Population on';
     btn.style.borderColor = 'var(--accent)';
     btn.style.color = 'var(--accent)';
