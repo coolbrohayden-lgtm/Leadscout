@@ -813,8 +813,26 @@ select:focus { border-color:var(--accent); }
       </div>
       <div class="btn-row" style="margin-bottom:6px">
         <button class="btn" onclick="clearSel()">Clear</button>
-        <button class="btn btn-p" id="scanBtn" onclick="startScan()" disabled>Scan selected</button>
-        <button class="btn" id="debugBtn" onclick="startScan(true)" disabled style="font-size:11px;border-color:#f5a623;color:#f5a623">🔬 Debug 1</button>
+        <button class="btn" onclick="selectAllVisible()" title="Select every visible grid cell">Select all</button>
+        <button class="btn btn-p" id="scanBtn" onclick="startScan()" disabled>Scan</button>
+        <button class="btn" id="debugBtn" onclick="startScan(true)" disabled style="font-size:11px;border-color:#f5a623;color:#f5a623">🔬</button>
+      </div>
+    </div>
+    <div class="sec">
+      <h3 style="display:flex;align-items:center;justify-content:space-between">
+        Map layers
+        <button class="btn" id="popToggleBtn" onclick="togglePopLayer()" style="font-size:10px;padding:3px 9px">Population off</button>
+      </h3>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Overlay shows population density — helps you focus on metro areas and skip rural/unpopulated zones.</div>
+    </div>
+    <div class="sec">
+      <h3 style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleMetros()">
+        Metro quick-pick
+        <svg id="metroChevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transform:rotate(0deg);transition:.2s"><polyline points="6 9 12 15 18 9"/></svg>
+      </h3>
+      <div id="metroPanel">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Click a metro to jump to it, then click "Select all" to fill the grid.</div>
+        <div id="metroList" style="display:flex;flex-direction:column;gap:10px"></div>
       </div>
     </div>
     <div class="sec">
@@ -1026,6 +1044,7 @@ function extFetch(type, handle, name, city, url, bizType) {
   map.on('moveend', () => redrawGrid(false));
   map.on('zoomend', () => redrawGrid(true));
   redrawGrid(true);
+  buildMetroList();
   // Load shared keys (google + rapid) from Supabase
   const {data: sharedSettings} = await supabaseClient.from('shared_settings').select('*').eq('id',1).single();
   if(sharedSettings?.google_key) document.getElementById('apiKeyInput').value = sharedSettings.google_key;
@@ -1185,6 +1204,126 @@ function clearSel(){
   selectedBounds = {};
   redrawGrid();
   updateStats();
+}
+
+function selectAllVisible(){
+  gridLayers.forEach(obj => {
+    if(!selectedBounds[obj.key]){
+      selectedBounds[obj.key] = {bounds: obj.bounds, rect: obj.rect};
+      obj.rect.setStyle({fillOpacity:0.3, weight:2, color:'#6c63ff'});
+    }
+  });
+  updateStats();
+}
+
+// ── Population density overlay ──
+let popLayer = null;
+let popLayerOn = false;
+
+function togglePopLayer(){
+  const btn = document.getElementById('popToggleBtn');
+  if(popLayerOn){
+    if(popLayer) map.removeLayer(popLayer);
+    popLayerOn = false;
+    btn.textContent = 'Population off';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+  } else {
+    if(!popLayer){
+      // ESRI USA Population Density (free, no key needed)
+      popLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Demographics/USA_Population_Density/MapServer/tile/{z}/{y}/{x}',
+        { opacity: 0.55, maxZoom: 17, attribution: 'ESRI Population Density' }
+      );
+    }
+    popLayer.addTo(map);
+    popLayerOn = true;
+    btn.textContent = 'Population on';
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+  }
+}
+
+// ── Metro quick-pick ──
+const METROS = [
+  { state:'FL', cities:[
+    { name:'Miami',       lat:25.7617, lng:-80.1918, zoom:11 },
+    { name:'Orlando',     lat:28.5383, lng:-81.3792, zoom:11 },
+    { name:'Tampa',       lat:27.9506, lng:-82.4572, zoom:11 },
+    { name:'Jacksonville',lat:30.3322, lng:-81.6557, zoom:11 },
+    { name:'Fort Lauderdale', lat:26.1224, lng:-80.1373, zoom:12 },
+    { name:'West Palm Beach', lat:26.7153, lng:-80.0534, zoom:12 },
+    { name:'Naples',      lat:26.1420, lng:-81.7948, zoom:12 },
+    { name:'Sarasota',    lat:27.3364, lng:-82.5307, zoom:12 },
+  ]},
+  { state:'TX', cities:[
+    { name:'Houston',     lat:29.7604, lng:-95.3698, zoom:11 },
+    { name:'Dallas',      lat:32.7767, lng:-96.7970, zoom:11 },
+    { name:'Austin',      lat:30.2672, lng:-97.7431, zoom:11 },
+    { name:'San Antonio', lat:29.4241, lng:-98.4936, zoom:11 },
+  ]},
+  { state:'NY', cities:[
+    { name:'New York City',lat:40.7128, lng:-74.0060, zoom:11 },
+    { name:'Buffalo',     lat:42.8864, lng:-78.8784, zoom:12 },
+    { name:'Albany',      lat:42.6526, lng:-73.7562, zoom:12 },
+  ]},
+  { state:'CA', cities:[
+    { name:'Los Angeles', lat:34.0522, lng:-118.2437, zoom:11 },
+    { name:'San Francisco',lat:37.7749, lng:-122.4194, zoom:12 },
+    { name:'San Diego',   lat:32.7157, lng:-117.1611, zoom:12 },
+    { name:'Sacramento',  lat:38.5816, lng:-121.4944, zoom:12 },
+  ]},
+  { state:'GA', cities:[
+    { name:'Atlanta',     lat:33.7490, lng:-84.3880, zoom:11 },
+    { name:'Savannah',    lat:32.0835, lng:-81.0998, zoom:12 },
+  ]},
+  { state:'NC', cities:[
+    { name:'Charlotte',   lat:35.2271, lng:-80.8431, zoom:11 },
+    { name:'Raleigh',     lat:35.7796, lng:-78.6382, zoom:12 },
+  ]},
+  { state:'IL', cities:[
+    { name:'Chicago',     lat:41.8781, lng:-87.6298, zoom:11 },
+  ]},
+  { state:'AZ', cities:[
+    { name:'Phoenix',     lat:33.4484, lng:-112.0740, zoom:11 },
+    { name:'Scottsdale',  lat:33.4942, lng:-111.9261, zoom:12 },
+  ]},
+  { state:'NV', cities:[
+    { name:'Las Vegas',   lat:36.1699, lng:-115.1398, zoom:11 },
+  ]},
+  { state:'WA', cities:[
+    { name:'Seattle',     lat:47.6062, lng:-122.3321, zoom:11 },
+  ]},
+];
+
+let metroOpen = true;
+
+function toggleMetros(){
+  metroOpen = !metroOpen;
+  document.getElementById('metroPanel').style.display = metroOpen ? '' : 'none';
+  document.getElementById('metroChevron').style.transform = metroOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+}
+
+function buildMetroList(){
+  const wrap = document.getElementById('metroList');
+  wrap.innerHTML = METROS.map(group => `
+    <div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">${group.state}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${group.cities.map(c =>
+          `<button class="fchip" style="font-size:10.5px;padding:3px 9px" onclick="jumpToMetro(${c.lat},${c.lng},${c.zoom})">${c.name}</button>`
+        ).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function jumpToMetro(lat, lng, zoom){
+  map.setView([lat, lng], zoom);
+  // Give the grid a moment to redraw then select all visible cells
+  setTimeout(() => {
+    selectAllVisible();
+  }, 400);
 }
 
 function updateStats(){
