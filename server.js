@@ -222,6 +222,23 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Census 2020 county population proxy — Census API blocks browser CORS
+  if (url === '/census-counties') {
+    try {
+      const r = await fetch(
+        'https://api.census.gov/data/2020/dec/pl?get=P1_001N&for=county:*',
+        { headers: { 'User-Agent': 'LeadScout/1.0' } }
+      );
+      const data = await r.text();
+      res.writeHead(r.status, { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'public,max-age=86400' });
+      res.end(data);
+    } catch(e) {
+      res.writeHead(502, CORS);
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // Population density tile proxy — proxies ESRI USA Population Density MapServer
   // URL pattern: /pop-tile/{z}/{y}/{x}  (ESRI uses y/x order)
   if (url.startsWith('/pop-tile/')) {

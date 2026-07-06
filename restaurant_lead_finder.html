@@ -1260,7 +1260,7 @@ async function _buildPopLayer() {
 
     _popLog('fetching Census 2020 population…');
     try {
-      const r = await fetch('https://api.census.gov/data/2020/dec/pl?get=P1_001N&for=county:*');
+      const r = await fetch('/census-counties');
       _popLog('census status: ' + r.status + ' ' + r.statusText);
       census = await r.json();
       _popLog('census rows: ' + (Array.isArray(census) ? census.length : 'not array'));
