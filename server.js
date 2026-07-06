@@ -222,18 +222,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Census 2020 county population proxy — Census API blocks browser CORS
+  // County population lookup — served from local file (no external API needed)
   if (url === '/census-counties') {
     try {
-      const r = await fetch(
-        'https://api.census.gov/data/2020/dec/pl?get=P1_001N&for=county:*',
-        { headers: { 'User-Agent': 'LeadScout/1.0' } }
-      );
-      const data = await r.text();
-      res.writeHead(r.status, { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'public,max-age=86400' });
+      const data = fs.readFileSync(path.join(__dirname, 'county-pop.json'), 'utf8');
+      res.writeHead(200, { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'public,max-age=86400' });
       res.end(data);
     } catch(e) {
-      res.writeHead(502, CORS);
+      res.writeHead(500, CORS);
       res.end(JSON.stringify({ error: e.message }));
     }
     return;

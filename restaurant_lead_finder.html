@@ -1258,22 +1258,17 @@ async function _buildPopLayer() {
       throw e;
     }
 
-    _popLog('fetching Census 2020 population…');
+    _popLog('fetching county population data…');
+    let pop;
     try {
       const r = await fetch('/census-counties');
       _popLog('census status: ' + r.status + ' ' + r.statusText);
-      census = await r.json();
-      _popLog('census rows: ' + (Array.isArray(census) ? census.length : 'not array'));
+      pop = await r.json();
+      _popLog('census counties: ' + Object.keys(pop).length);
     } catch(e) {
       _popLog('census fetch error: ' + e.message, true);
       throw e;
     }
-
-    // Build FIPS → population lookup from Census API rows (row 0 is header)
-    const pop = {};
-    census.slice(1).forEach(([p, state, county]) => {
-      pop[state.padStart(2,'0') + county.padStart(3,'0')] = parseInt(p) || 0;
-    });
     _popLog('pop lookup built: ' + Object.keys(pop).length + ' counties');
 
     // Convert TopoJSON → GeoJSON and attach population
