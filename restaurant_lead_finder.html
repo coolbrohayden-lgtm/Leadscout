@@ -708,9 +708,13 @@ header input::placeholder{color:var(--muted2);}
 #map { flex: 1; }
 .leaflet-tile { filter: brightness(0.6) saturate(0.5); }
 .sidebar { width: 300px; flex-shrink: 0; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
-.sec { padding: 13px 15px; border-bottom: 1px solid var(--border); }
-.sec h3 { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; }
-.stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.sec { padding: 10px 15px; border-bottom: 1px solid var(--border); }
+.sec h3 { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; cursor: pointer; user-select: none; }
+.sec h3::before { content: '▾'; display: inline-block; margin-right: 6px; transition: transform .15s; font-size: 8px; vertical-align: 1px; }
+.sec.collapsed h3::before { transform: rotate(-90deg); }
+.sec.collapsed h3 { margin-bottom: 0; }
+.sec.collapsed > *:not(h3) { display: none !important; }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; margin-bottom: 9px; }
 .stat { background: linear-gradient(180deg,var(--surface2),var(--surface)); border:1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px; }
 .stat .v { font-size: 21px; font-weight: 800; letter-spacing:-.02em; }
 .stat .l { font-size: 9.5px; font-weight:600; color: var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
@@ -786,7 +790,7 @@ select:focus { border-color:var(--accent); }
   <div id="map"></div>
   <aside class="sidebar">
     <div class="sec">
-      <h3>Grid settings</h3>
+      <h3 onclick="this.parentElement.classList.toggle('collapsed')">Grid settings</h3>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
         <span style="font-size:11px;color:var(--muted)">Size</span>
         <select id="gridSize" onchange="redrawGrid(true)">
@@ -816,15 +820,15 @@ select:focus { border-color:var(--accent); }
         <button class="btn" onclick="clearSel()">Clear</button>
         <button class="btn" onclick="selectAllVisible()" title="Select every visible grid cell">Select all</button>
         <button class="btn btn-p" id="scanBtn" onclick="startScan()" disabled>Scan</button>
-        <button class="btn" id="debugBtn" onclick="startScan(true)" disabled style="font-size:11px;border-color:#f5a623;color:#f5a623">🔬</button>
+        <button class="btn" id="debugBtn" onclick="startScan(true)" disabled style="display:none;font-size:11px;border-color:#f5a623;color:#f5a623">🔬</button>
       </div>
     </div>
-    <div class="sec">
-      <h3 style="display:flex;align-items:center;justify-content:space-between">
-        Map layers
-        <button class="btn" id="popToggleBtn" onclick="togglePopLayer()" style="font-size:10px;padding:3px 9px">Population off</button>
+    <div class="sec collapsed">
+      <h3 style="display:flex;align-items:center;justify-content:space-between" onclick="this.parentElement.classList.toggle('collapsed')">
+        <span>Map layers</span>
+        <button class="btn" id="popToggleBtn" onclick="event.stopPropagation();togglePopLayer()" style="font-size:10px;padding:3px 9px">Population off</button>
       </h3>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Colors counties by census population so you can target metro areas and skip empty zones. Hover the map for county details; selected cells show an estimated headcount.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.5">Colors counties by census population. Hover the map for county details. While on, clicking selects the whole county; selected cells show an estimated headcount.</div>
     </div>
     <div class="status" id="statusBar">Select zones on the map, then scan.</div>
     <div class="prog"><div class="prog-fill" id="progFill"></div></div>
@@ -1032,6 +1036,9 @@ function extFetch(type, handle, name, city, url, bizType) {
   const {data: sharedSettings} = await supabaseClient.from('shared_settings').select('*').eq('id',1).single();
   if(sharedSettings?.google_key) document.getElementById('apiKeyInput').value = sharedSettings.google_key;
   if(sharedSettings?.rapid_key) document.getElementById('rapidApiKeyInput').value = sharedSettings.rapid_key;
+  // Debug scan button — admin only
+  if (isAdmin()) document.getElementById('debugBtn').style.display = '';
+
   // Lock API key inputs to admin only
   if (!isAdmin()) {
     ['apiKeyInput','rapidApiKeyInput'].forEach(id => {
@@ -1172,12 +1179,95 @@ function redrawGrid(recomputeSpacing){
 
 function toggleChunk(obj){
   const {key, bounds, rect} = obj;
+  // Population mode: a click selects/deselects the whole county under the cell
+  if(popLayerOn && _popGeoData){
+    const f = _popFeatureAt((bounds.w + bounds.e)/2, (bounds.n + bounds.s)/2);
+    if(f){ toggleCounty(f); return; }
+  }
   if(selectedBounds[key]){
     delete selectedBounds[key];
     rect.setStyle({fillOpacity:0.05, weight:0.8, color:'rgba(108,99,255,0.4)'});
   } else {
     selectedBounds[key] = {bounds, rect};
     rect.setStyle({fillOpacity:0.3, weight:2, color:'#6c63ff'});
+  }
+  updateStats();
+}
+
+// Point-in-feature test against one known county (faster than scanning all)
+function _popPointInFeature(lng, lat, f){
+  const bb = f._bbox;
+  if(lng < bb[0] || lat < bb[1] || lng > bb[2] || lat > bb[3]) return false;
+  const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+  for(const rings of polys){
+    if(_popPointInRing(lng, lat, rings[0])){
+      let inHole = false;
+      for(let h = 1; h < rings.length; h++){
+        if(_popPointInRing(lng, lat, rings[h])){ inHole = true; break; }
+      }
+      if(!inHole) return true;
+    }
+  }
+  return false;
+}
+
+// Select/deselect every grid cell whose center falls inside a county polygon.
+// Cells use the same world-pixel grid math as redrawGrid so keys always match.
+function toggleCounty(f){
+  const zoom = map.getZoom();
+  const [minX, minY, maxX, maxY] = f._bbox;
+  const pNW = map.project(L.latLng(maxY, minX), zoom);
+  const pSE = map.project(L.latLng(minY, maxX), zoom);
+  const startCol = Math.floor(pNW.x / gridCellPx), endCol = Math.ceil(pSE.x / gridCellPx);
+  const startRow = Math.floor(pNW.y / gridCellPx), endRow = Math.ceil(pSE.y / gridCellPx);
+  const totalCells = (endCol - startCol) * (endRow - startRow);
+  if(totalCells > 8000){
+    setStatus(`${f.properties.name} is too big at this zoom — zoom out a bit, then click it.`);
+    return;
+  }
+
+  const cells = [];
+  for(let r = startRow; r < endRow; r++){
+    for(let c = startCol; c < endCol; c++){
+      const tl = map.unproject([c * gridCellPx, r * gridCellPx], zoom);
+      const br = map.unproject([(c + 1) * gridCellPx, (r + 1) * gridCellPx], zoom);
+      if(_popPointInFeature((tl.lng + br.lng)/2, (tl.lat + br.lat)/2, f)){
+        cells.push({s: br.lat, n: tl.lat, w: tl.lng, e: br.lng});
+      }
+    }
+  }
+  if(!cells.length) return;
+
+  const keys = cells.map(b => `${b.s.toFixed(6)}_${b.w.toFixed(6)}`);
+  const allSelected = keys.every(k => selectedBounds[k]);
+
+  if(allSelected){
+    keys.forEach(k => {
+      const d = selectedBounds[k];
+      if(d){
+        delete selectedBounds[k];
+        d.rect.setStyle({fillOpacity:0.05, weight:0.8, color:'rgba(108,99,255,0.4)'});
+      }
+    });
+    setStatus(`Deselected ${f.properties.name} (${keys.length} cells).`);
+  } else {
+    cells.forEach((b, i) => {
+      const key = keys[i];
+      if(selectedBounds[key]) return;
+      const existing = gridLayers.find(o => o.key === key);
+      let rect = existing ? existing.rect : null;
+      if(!rect){
+        rect = L.rectangle([[b.s, b.w], [b.n, b.e]], {
+          color: 'rgba(108,99,255,0.5)', weight: 1,
+          fillColor: '#6c63ff', fillOpacity: 0.07, interactive: true,
+        }).addTo(map);
+        const nobj = {rect, key, bounds: b};
+        rect.on('click', () => toggleChunk(nobj));
+      }
+      selectedBounds[key] = {bounds: b, rect};
+      rect.setStyle({fillOpacity:0.3, weight:2, color:'#6c63ff'});
+    });
+    setStatus(`Selected ${f.properties.name} — ${keys.length} cells (${(f.properties._pop || 0).toLocaleString()} people).`);
   }
   updateStats();
 }
