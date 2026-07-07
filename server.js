@@ -230,12 +230,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // NEW: Nearby search using Places API (New)
+  // Nearby search — legacy Places API (covered by $200/mo free credit, ~6,600 free searches)
+  // Places API (New) has NO free tier and was causing unexpected charges.
   if (parsed.pathname === '/nearbysearch') {
     const { lat, lng, radius, key, type } = parsed.query;
     if (!lat || !lng || !key) { res.writeHead(400); res.end('Missing params'); return; }
 
-    // Map friendly keywords to Google Places types
     const TYPE_MAP = {
       'med spa': 'spa', 'medspa': 'spa', 'medical spa': 'spa',
       'hair salon': 'hair_salon', 'nail salon': 'nail_salon',
@@ -250,34 +250,16 @@ const server = http.createServer(async (req, res) => {
     const resolvedType = TYPE_MAP[rawType] || rawType;
 
     try {
-      const body = {
-        includedTypes: [resolvedType],
-        maxResultCount: 20,
-        locationRestriction: {
-          circle: {
-            center: { latitude: parseFloat(lat), longitude: parseFloat(lng) },
-            radius: parseFloat(radius) || 1500
-          }
-        }
-      };
-      const data = await httpsPost(
-        'https://places.googleapis.com/v1/places:searchNearby',
-        body, key
-      );
-      // Normalize to legacy format so HTML code doesn't need to change much
-      const results = (data.places || []).map(p => ({
-        place_id: p.id,
-        name: p.displayName?.text || '',
-        vicinity: p.formattedAddress || '',
-        rating: p.rating,
-        user_ratings_total: p.userRatingCount,
-        geometry: { location: { lat: p.location?.latitude, lng: p.location?.longitude } },
-        // carry extra fields through
-        website: p.websiteUri || '',
-        phone: p.nationalPhoneNumber || p.internationalPhoneNumber || '',
-      }));
+      const qs = new URLSearchParams({
+        location: `${lat},${lng}`,
+        radius: String(parseFloat(radius) || 1500),
+        type: resolvedType,
+        key,
+      });
+      const raw = await fetchPageDirect(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?${qs}`);
+      const data = JSON.parse(raw);
       res.writeHead(200, CORS);
-      res.end(JSON.stringify({ status: 'OK', results }));
+      res.end(JSON.stringify({ status: data.status, results: data.results || [] }));
     } catch(e) {
       console.error('nearbysearch error:', e.message);
       res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
@@ -285,42 +267,20 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // NEW: Place details using Places API (New)
+  // Place details — legacy Places API (same free credit as above)
   if (parsed.pathname === '/placedetails') {
     const { place_id, key } = parsed.query;
     if (!place_id || !key) { res.writeHead(400); res.end('Missing params'); return; }
     try {
-      const apiUrl = `https://places.googleapis.com/v1/places/${place_id}`;
-      const urlObj = new URL(apiUrl);
-      const data = await new Promise((resolve, reject) => {
-        const options = {
-          hostname: urlObj.hostname,
-          path: urlObj.pathname,
-          method: 'GET',
-          headers: {
-            'X-Goog-Api-Key': key,
-            'X-Goog-FieldMask': 'id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,rating,userRatingCount,location'
-          }
-        };
-        const req = https.request(options, (res) => {
-          let d = '';
-          res.on('data', c => d += c);
-          res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
-        });
-        req.on('error', reject);
-        req.end();
+      const qs = new URLSearchParams({
+        place_id,
+        fields: 'name,formatted_address,formatted_phone_number,website,rating,user_ratings_total',
+        key,
       });
-      // Normalize to legacy format
-      const result = {
-        name: data.displayName?.text || '',
-        formatted_address: data.formattedAddress || '',
-        formatted_phone_number: data.nationalPhoneNumber || '',
-        website: data.websiteUri || '',
-        rating: data.rating,
-        user_ratings_total: data.userRatingCount,
-      };
+      const raw = await fetchPageDirect(`https://maps.googleapis.com/maps/api/place/details/json?${qs}`);
+      const data = JSON.parse(raw);
       res.writeHead(200, CORS);
-      res.end(JSON.stringify({ status: 'OK', result }));
+      res.end(JSON.stringify({ status: data.status, result: data.result || {} }));
     } catch(e) {
       console.error('placedetails error:', e.message);
       res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
