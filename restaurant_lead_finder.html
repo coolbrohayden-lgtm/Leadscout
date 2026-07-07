@@ -1675,63 +1675,105 @@ async function startScan(debugMode=false){
         }
       }
 
-      // ── Lightweight scan: use Nearby Search data directly (no Place Details call)
-      // Phone/website/social are fetched on demand when user clicks "Analyze"
-      const address = place.vicinity || place.formatted_address || place.address || '';
-      const placeBasic = {
-        website: '',
-        user_ratings_total: place.user_ratings_total || 0,
-        rating: place.rating || 0,
-        formatted_phone_number: '',
-        formatted_address: address,
-      };
-      const {score, reasons, label} = scoreLead(placeBasic, null, {}, null, null, null, null);
+      const details = await placeDetails(place.place_id || place.name, apiKey, place);
+      const website = details.website || place.website || '';
+      const socials = await scrapeSocials(website);
+
+      const city = (details.formatted_address||'').split(',').slice(-3,-1).join(',').trim();
+
+      // If website scrape found nothing, do a deep DOM scan via extension (renders full JS)
+      if(extReady && website && (!socials.instagram || !socials.tiktok || !socials.facebook)){
+        const scan = await extFetch('scanpage', null, null, null, website);
+        if(scan && !scan.error){
+          if(scan.signals?.length) dbg(`DOM scan signals for "${place.name}": ${scan.signals.join(' | ')}`);
+          if(!socials.instagram && scan.instagram){ socials.instagram = scan.instagram; socials._igFromScan = true; dbg(`DOM scan found IG @${scan.instagram} for "${place.name}"`); }
+          if(!socials.tiktok   && scan.tiktok)  { socials.tiktok   = scan.tiktok;   socials._ttFromScan = true; dbg(`DOM scan found TT @${scan.tiktok} for "${place.name}"`); }
+          if(!socials.facebook && scan.facebook) { socials.facebook = scan.facebook; dbg(`DOM scan found FB ${scan.facebook} for "${place.name}"`); }
+          // Store icon-only detections (platform present on site but no extractable handle)
+          const sigs = scan.signals || [];
+          if(!socials.instagram && sigs.some(s => s.includes('instagram'))) socials._igSignal = true;
+          if(!socials.tiktok   && sigs.some(s => s.includes('tiktok')))   socials._ttSignal = true;
+          if(!socials.facebook && sigs.some(s => s.includes('facebook'))) socials._fbSignal = true;
+          const imgSignals = sigs.filter(s=>s.startsWith('img:')||s.startsWith('icon:'));
+          if(imgSignals.length) dbg(`Social icons detected (no link): ${imgSignals.join(', ')}`);
+        } else if(scan?.error) {
+          dbg(`DOM scan failed for "${place.name}": ${scan.error}`);
+        }
+      }
+
+      const doIg = true;
+      const doTt = true;
+
+      // Strip location suffixes like "- St. Augustine" or "| Doral" before name searches
+      const searchName = place.name.replace(/\s*[-|–]\s*.{3,}$/, '').trim();
+
+      // If still no IG, try Instagram name search
+      if(doIg && !socials.instagram && extReady){
+        const igSearch = await extFetch('searchig', null, searchName, city);
+        if(igSearch.handle){
+          socials.instagram = igSearch.handle;
+          socials._igFromSearch = true;
+          dbg(`IG name search found @${igSearch.handle} for "${place.name}" (confidence ${igSearch.confidence})`);
+        } else {
+          dbg(`IG name search: no match for "${place.name}" — ${igSearch.reason||igSearch.error||''}`);
+        }
+      }
+
+      // If still no TikTok, try TikTok name search
+      if(doTt && !socials.tiktok && extReady){
+        const ttSearch = await extFetch('searchtt', null, searchName, city);
+        if(ttSearch.handle){
+          socials.tiktok = ttSearch.handle;
+          socials._ttFromSearch = true;
+          dbg(`TT name search found @${ttSearch.handle} for "${place.name}" (confidence ${ttSearch.confidence})`);
+        } else {
+          dbg(`TT name search: no match for "${place.name}" — ${ttSearch.reason||ttSearch.error||''}`);
+        }
+      }
+
+      const ig = socials.instagram;
+      const address = details.formatted_address || place.vicinity || place.address || '';
+      const igStats = ig ? await scrapeIgStats(ig) : {followers:null,posts:null,bio:''};
+      const igEngagement = ig && rapidKey ? await fetchIgEngagement(ig, rapidKey) : null;
+      const ttStats = socials.tiktok ? await scrapeTikTokStats(socials.tiktok) : {followers:null,totalLikes:null,bio:''};
+      const businessEmail = website ? await scrapeBusinessEmail(website) : null;
+
+      const igBioCheck = checkBioLocation(igStats.bio, city, address);
+      const ttBioCheck = checkBioLocation(ttStats.bio, city, address);
+      if(igStats.bio) dbg(`IG bio @${ig}: "${igStats.bio.slice(0,80)}" → location match: ${igBioCheck.match ? igBioCheck.found.join(', ') : 'none'}`);
+      if(ttStats.bio) dbg(`TT bio @${socials.tiktok}: "${ttStats.bio.slice(0,80)}" → location match: ${ttBioCheck.match ? ttBioCheck.found.join(', ') : 'none'}`);
+
+      const {score, reasons, label} = scoreLead(details, ig, socials, igStats, ttStats, igBioCheck, ttBioCheck);
 
       const existingLead = allLeads.find(l=>l.place_id===place.place_id);
-      // Preserve details if already analyzed
-      const prevDetails = existingLead?.details_loaded ? {
-        phone: existingLead.phone, website: existingLead.website,
-        instagram: existingLead.instagram, ig_followers: existingLead.ig_followers,
-        ig_posts: existingLead.ig_posts, ig_bio: existingLead.ig_bio,
-        ig_bio_location: existingLead.ig_bio_location, ig_category: existingLead.ig_category,
-        ig_engagement: existingLead.ig_engagement,
-        tiktok: existingLead.tiktok, tt_followers: existingLead.tt_followers,
-        tt_total_likes: existingLead.tt_total_likes, tt_bio: existingLead.tt_bio,
-        tt_bio_location: existingLead.tt_bio_location,
-        facebook: existingLead.facebook,
-        ig_from_search: existingLead.ig_from_search, tt_from_search: existingLead.tt_from_search,
-        ig_from_scan: existingLead.ig_from_scan, tt_from_scan: existingLead.tt_from_scan,
-        ig_signal: existingLead.ig_signal, tt_signal: existingLead.tt_signal,
-        fb_signal: existingLead.fb_signal,
-        business_email: existingLead.business_email,
-        score: existingLead.score, label: existingLead.label, reasons: existingLead.reasons,
-        details_loaded: true,
-      } : null;
-
       const lead = {
         place_id: place.place_id || `${place.name}_${address}`.replace(/\s+/g,'_'),
         name: place.name,
         address,
-        phone: '', website: '',
+        phone: details.formatted_phone_number || place.phone || '',
+        website,
         google_rating: place.rating || '',
         google_reviews: place.user_ratings_total || 0,
         lat: place.geometry?.location?.lat ?? place.lat,
         lng: place.geometry?.location?.lng ?? place.lng,
-        instagram:'', ig_followers:'', ig_posts:'',
-        ig_bio:'', ig_bio_location:'', ig_category:'', ig_engagement:null,
-        tiktok:'', tt_followers:'', tt_total_likes:'',
-        tt_bio:'', tt_bio_location:'',
-        facebook:'',
-        ig_from_search:false, tt_from_search:false,
-        ig_from_scan:false, tt_from_scan:false,
-        ig_signal:false, tt_signal:false, fb_signal:false,
-        business_email: null,
+        instagram: ig||'', ig_followers: igStats?.followers??'', ig_posts: igStats?.posts??'',
+        ig_bio: igStats.bio||'', ig_bio_location: igBioCheck.found.join(', '), ig_category: igStats.category||'',
+        ig_engagement: igEngagement ? JSON.stringify(igEngagement) : null,
+        tiktok: socials.tiktok||'', tt_followers: ttStats?.followers??'', tt_total_likes: ttStats?.totalLikes??'',
+        tt_bio: ttStats.bio||'', tt_bio_location: ttBioCheck.found.join(', '),
+        facebook: socials.facebook||'',
+        ig_from_search: socials._igFromSearch||false,
+        tt_from_search: socials._ttFromSearch||false,
+        ig_from_scan: socials._igFromScan||false,
+        tt_from_scan: socials._ttFromScan||false,
+        ig_signal: socials._igSignal||false,
+        tt_signal: socials._ttSignal||false,
+        fb_signal: socials._fbSignal||false,
+        business_email: businessEmail || null,
         business_type: currentBizType || 'restaurant',
-        details_loaded: false,
         score, label, reasons: reasons.join(' | '),
         status: existingLead?.status || 'new',
         scanned_at: Date.now(),
-        ...(prevDetails || {}),
       };
 
       currentScanIds.add(lead.place_id);
@@ -1822,85 +1864,6 @@ async function placeDetails(placeId,key,fallback){
     rating: fallback?.rating,
     user_ratings_total: fallback?.user_ratings_total||0,
   };
-}
-
-// ── Load full details on demand (phone, website, social) ──
-async function loadLeadDetails(placeId){
-  const lead = allLeads.find(l=>l.place_id===placeId);
-  if(!lead || lead.details_loaded) return;
-  const apiKey = document.getElementById('apiKey').value.trim();
-  if(!apiKey){ alert('Paste your API key first'); return; }
-
-  lead._analyzing = true;
-  renderLeads();
-
-  try{
-    const details = await placeDetails(placeId, apiKey, lead);
-    const website = details.website || '';
-    const socials = await scrapeSocials(website);
-    const city = (details.formatted_address||lead.address||'').split(',').slice(-3,-1).join(',').trim();
-
-    if(extReady && website && (!socials.instagram || !socials.tiktok || !socials.facebook)){
-      const scan = await extFetch('scanpage', null, null, null, website);
-      if(scan && !scan.error){
-        if(!socials.instagram && scan.instagram){ socials.instagram = scan.instagram; socials._igFromScan = true; }
-        if(!socials.tiktok   && scan.tiktok)  { socials.tiktok   = scan.tiktok;   socials._ttFromScan = true; }
-        if(!socials.facebook && scan.facebook) { socials.facebook = scan.facebook; }
-        const sigs = scan.signals || [];
-        if(!socials.instagram && sigs.some(s=>s.includes('instagram'))) socials._igSignal = true;
-        if(!socials.tiktok   && sigs.some(s=>s.includes('tiktok')))   socials._ttSignal = true;
-        if(!socials.facebook && sigs.some(s=>s.includes('facebook'))) socials._fbSignal = true;
-      }
-    }
-
-    const searchName = lead.name.replace(/\s*[-|–]\s*.{3,}$/, '').trim();
-    if(!socials.instagram && extReady){
-      const igSearch = await extFetch('searchig', null, searchName, city);
-      if(igSearch.handle){ socials.instagram = igSearch.handle; socials._igFromSearch = true; }
-    }
-    if(!socials.tiktok && extReady){
-      const ttSearch = await extFetch('searchtt', null, searchName, city);
-      if(ttSearch.handle){ socials.tiktok = ttSearch.handle; socials._ttFromSearch = true; }
-    }
-
-    const ig = socials.instagram;
-    const igStats = ig ? await scrapeIgStats(ig) : {followers:null,posts:null,bio:''};
-    const igEngagement = ig && rapidKey ? await fetchIgEngagement(ig, rapidKey) : null;
-    const ttStats = socials.tiktok ? await scrapeTikTokStats(socials.tiktok) : {followers:null,totalLikes:null,bio:''};
-    const businessEmail = website ? await scrapeBusinessEmail(website) : null;
-    const igBioCheck = checkBioLocation(igStats.bio, city, details.formatted_address||lead.address);
-    const ttBioCheck = checkBioLocation(ttStats.bio, city, details.formatted_address||lead.address);
-
-    const {score, reasons, label} = scoreLead(
-      {...details, rating: lead.google_rating, user_ratings_total: lead.google_reviews},
-      ig, socials, igStats, ttStats, igBioCheck, ttBioCheck
-    );
-
-    Object.assign(lead, {
-      phone: details.formatted_phone_number || '',
-      website,
-      address: details.formatted_address || lead.address,
-      instagram: ig||'', ig_followers: igStats?.followers??'', ig_posts: igStats?.posts??'',
-      ig_bio: igStats.bio||'', ig_bio_location: igBioCheck.found.join(', '), ig_category: igStats.category||'',
-      ig_engagement: igEngagement ? JSON.stringify(igEngagement) : null,
-      tiktok: socials.tiktok||'', tt_followers: ttStats?.followers??'', tt_total_likes: ttStats?.totalLikes??'',
-      tt_bio: ttStats.bio||'', tt_bio_location: ttBioCheck.found.join(', '),
-      facebook: socials.facebook||'',
-      ig_from_search: socials._igFromSearch||false, tt_from_search: socials._ttFromSearch||false,
-      ig_from_scan: socials._igFromScan||false, tt_from_scan: socials._ttFromScan||false,
-      ig_signal: socials._igSignal||false, tt_signal: socials._ttSignal||false, fb_signal: socials._fbSignal||false,
-      business_email: businessEmail||null,
-      score, label, reasons: reasons.join(' | '),
-      details_loaded: true,
-    });
-    delete lead._analyzing;
-    await saveLead(lead);
-    allLeads.sort((a,b)=>b.score-a.score);
-  } catch(e) {
-    delete lead._analyzing;
-    dbg(`loadLeadDetails failed for ${lead.name}: ${e.message}`);
-  }
-  renderLeads(); updateStats();
 }
 
 // ── Chain filter ──
@@ -2361,17 +2324,14 @@ function renderLeads(){
   w.innerHTML=filtered.map((l,i)=>{
     const statusColors={contacted:'s-contacted',interested:'s-interested',signed:'s-signed',denied:'s-denied'};
     const sc=l.status&&l.status!=='new'?statusColors[l.status]||'':'';
-    const isAnalyzing = !!l._analyzing;
-    const needsAnalysis = l.details_loaded === false && !isAnalyzing;
     return `
     <div class="card" onclick="focusLead('${l.place_id}')">
       <div class="card-top">
         <div class="card-name">${l.name}${l.status==='denied'?' 🚫':l.status==='signed'?' ✅':''}</div>
         <span class="badge badge-${l.label?.toLowerCase()||'cold'}">${l.label||'?'}</span>
       </div>
-      <div class="card-why">${isAnalyzing ? '⏳ Analyzing…' : (l.reasons||'No issues')}</div>
+      <div class="card-why">${l.reasons||'No issues'}</div>
       <div class="card-score">${l.score}/200 · ${l.address.split(',')[0]}</div>
-      ${needsAnalysis ? `<div style="margin-top:5px"><button onclick="event.stopPropagation();loadLeadDetails('${l.place_id}')" style="font-size:10px;padding:2px 8px;background:rgba(108,99,255,.15);border:1px solid rgba(108,99,255,.4);color:#a89fff;border-radius:4px;cursor:pointer">📋 Analyze</button><span style="font-size:9px;color:#666;margin-left:6px">tap to load social + contact</span></div>` : ''}
       <div style="font-size:10px;margin-top:4px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
         ${l.website?`<a href="${l.website}" target="_blank" onclick="event.stopPropagation()" style="color:#aaa;text-decoration:none">🌐</a>`:''}
         ${l.instagram
