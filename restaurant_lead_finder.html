@@ -846,6 +846,7 @@ select:focus { border-color:var(--accent); }
       <button class="fchip fc-cold" onclick="setFilter('COLD')">COLD</button>
       <button id="scanToggleBtn" class="btn" style="display:none;font-size:9px;padding:2px 8px;margin-left:auto" onclick="showCurrentScanOnly=!showCurrentScanOnly;renderLeads()">This Scan</button>
     </div>
+    <div id="scanLimitBar" style="margin:0 0 8px 0;padding:6px 8px;background:var(--surface2);border-radius:6px"></div>
     <div id="leadsWrap" class="leads">
       <div class="empty">Map loads instantly — no API key needed.<br><br>Paste your Google Maps API key above before scanning.</div>
     </div>
@@ -876,7 +877,8 @@ select:focus { border-color:var(--accent); }
 // ── State ──
 let map, gridLayers=[], selectedBounds={}, allLeads=[], gmarkers=[], scanning=false;
 let extReady = false;
-let igFetchMode = 'rapidapi'; // 'ext' or 'rapidapi' — set at scan start by session check
+let igFetchMode = 'rapidapi';
+const MONTHLY_SCAN_LIMIT = 1000; // max Place Details calls/month (stays within free Contact Data cap) // 'ext' or 'rapidapi' — set at scan start by session check
 let activeFilter = 'all';
 let currentScanIds = new Set(); // place_ids found in the most recent scan
 let showCurrentScanOnly = false;
@@ -1052,6 +1054,7 @@ function extFetch(type, handle, name, city, url, bizType) {
   if(profile?.tt_cookie) document.getElementById('ttCookieInput').value = profile.tt_cookie;
   await loadAllLeads();
   if(allLeads.length) document.getElementById('exportBtn').style.display='block';
+  getMonthlyScansUsed().then(updateScanLimitUI);
   setStatus('Click grid squares to select zones, then hit Scan.');
 })();
 
@@ -1647,6 +1650,14 @@ async function startScan(debugMode=false){
   outer: for(const tile of subTiles){
     const {lat, lng, r:radius} = tile;
 
+    // ── Monthly scan limit guard ──
+    const monthlyUsed = await getMonthlyScansUsed();
+    updateScanLimitUI(monthlyUsed);
+    if(monthlyUsed >= MONTHLY_SCAN_LIMIT){
+      setStatus(`⛔ Monthly scan limit (${MONTHLY_SCAN_LIMIT.toLocaleString()} places) reached — scanning stopped to protect your API budget. Resets on the 1st.`);
+      break outer;
+    }
+
     setStatus(`Scanning tile ${done+1} of ${subTiles.length}... (${allLeads.length} leads so far)`);
     dbg(`chunk ${done+1}: lat=${lat.toFixed(4)} lng=${lng.toFixed(4)} r=${Math.round(radius)}`);
 
@@ -1853,6 +1864,32 @@ async function nearbySearch(lat,lng,radius,key){
     setStatus('Error: make sure server.js is running (node server.js in C:\\Leadfinder)');
     return[];
   }
+}
+
+async function getMonthlyScansUsed(){
+  try{
+    const start = new Date(); start.setDate(1); start.setHours(0,0,0,0);
+    const {count} = await supabaseClient
+      .from('scan_cache')
+      .select('*', {count:'exact', head:true})
+      .gte('scanned_at', start.getTime());
+    return count || 0;
+  } catch(e){ return 0; }
+}
+
+function updateScanLimitUI(used){
+  const el = document.getElementById('scanLimitBar');
+  if(!el) return;
+  const pct = Math.min(100, Math.round((used / MONTHLY_SCAN_LIMIT) * 100));
+  const color = pct >= 90 ? '#ff5f5f' : pct >= 70 ? '#f5a623' : '#4ade80';
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-bottom:3px">
+      <span>API usage this month</span>
+      <span style="color:${color};font-weight:600">${used.toLocaleString()} / ${MONTHLY_SCAN_LIMIT.toLocaleString()}</span>
+    </div>
+    <div style="background:#222;border-radius:3px;height:4px;overflow:hidden">
+      <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;transition:width .3s"></div>
+    </div>`;
 }
 
 async function placeDetails(placeId,key,fallback){
