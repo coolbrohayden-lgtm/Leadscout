@@ -1743,7 +1743,13 @@ async function startScan(debugMode=false){
       if(igStats.bio) dbg(`IG bio @${ig}: "${igStats.bio.slice(0,80)}" → location match: ${igBioCheck.match ? igBioCheck.found.join(', ') : 'none'}`);
       if(ttStats.bio) dbg(`TT bio @${socials.tiktok}: "${ttStats.bio.slice(0,80)}" → location match: ${ttBioCheck.match ? ttBioCheck.found.join(', ') : 'none'}`);
 
-      const {score, reasons, label} = scoreLead(details, ig, socials, igStats, ttStats, igBioCheck, ttBioCheck);
+      // Merge Nearby Search rating/reviews (free) into details so scoreLead has them
+      const detailsForScore = {
+        ...details,
+        rating: place.rating ?? details.rating,
+        user_ratings_total: place.user_ratings_total ?? details.user_ratings_total,
+      };
+      const {score, reasons, label} = scoreLead(detailsForScore, ig, socials, igStats, ttStats, igBioCheck, ttBioCheck);
 
       const existingLead = allLeads.find(l=>l.place_id===place.place_id);
       const lead = {

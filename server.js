@@ -274,7 +274,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const qs = new URLSearchParams({
         place_id,
-        fields: 'name,formatted_address,formatted_phone_number,website,rating,user_ratings_total',
+        fields: 'name,formatted_address,formatted_phone_number,website',
         key,
       });
       const raw = await fetchPageDirect(`https://maps.googleapis.com/maps/api/place/details/json?${qs}`);
