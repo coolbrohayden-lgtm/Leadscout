@@ -222,6 +222,55 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Live billing balance — uses service account key, no user auth needed
+  if (parsed.pathname === '/billing-live') {
+    const saRaw = process.env.GOOGLE_BILLING_SA;
+    if (!saRaw) {
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify({ error: 'GOOGLE_BILLING_SA env var not set' }));
+      return;
+    }
+    try {
+      const sa = JSON.parse(saRaw);
+      const token = await getGoogleServiceAccountToken(sa, [
+        'https://www.googleapis.com/auth/cloud-billing.readonly',
+        'https://www.googleapis.com/auth/monitoring.read',
+      ]);
+      const billingAccountId = process.env.GOOGLE_BILLING_ACCOUNT || '0105B9-2A78E4-FCB7E5';
+      const projectId = sa.project_id;
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const monUrl = `https://monitoring.googleapis.com/v3/projects/${projectId}/timeSeries` +
+        `?filter=metric.type%3D%22billing.googleapis.com%2Fbilling%2Ftotal_charges%22` +
+        `&interval.startTime=${encodeURIComponent(monthStart)}` +
+        `&interval.endTime=${encodeURIComponent(now.toISOString())}` +
+        `&aggregation.alignmentPeriod=2592000s` +
+        `&aggregation.perSeriesAligner=ALIGN_SUM`;
+      const monResp = await fetchWithToken(monUrl, token);
+      if (monResp.timeSeries && monResp.timeSeries.length > 0) {
+        const points = monResp.timeSeries[0].points || [];
+        const total = points.reduce((s, p) => s + parseFloat(p.value?.doubleValue || 0), 0);
+        res.writeHead(200, CORS);
+        res.end(JSON.stringify({ source: 'monitoring', totalCharges: total.toFixed(4), currency: 'USD' }));
+        return;
+      }
+      const budgetUrl = `https://billingbudgets.googleapis.com/v1/billingAccounts/${billingAccountId}/budgets`;
+      const budgets = await fetchWithToken(budgetUrl, token);
+      if (budgets.budgets && budgets.budgets.length > 0) {
+        res.writeHead(200, CORS);
+        res.end(JSON.stringify({ source: 'budgets', budgets: budgets.budgets, currency: 'USD' }));
+        return;
+      }
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify({ error: 'no_data', message: 'Service account connected but no billing metrics found — see setup notes' }));
+    } catch(e) {
+      console.error('billing-live error:', e.message);
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // All routes below are API — require a valid Supabase session token
   const authToken = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
   if (!(await verifySupaToken(authToken))) {
@@ -583,62 +632,6 @@ const server = http.createServer(async (req, res) => {
       console.error('[enrich] error:', e.message);
       res.writeHead(200, CORS);
       res.end(JSON.stringify({ ...result, error: e.message }));
-    }
-    return;
-  }
-
-  // ── Live Google Cloud billing balance ──
-  if (parsed.pathname === '/billing-live') {
-    const saRaw = process.env.GOOGLE_BILLING_SA;
-    if (!saRaw) {
-      res.writeHead(200, CORS);
-      res.end(JSON.stringify({ error: 'GOOGLE_BILLING_SA env var not set' }));
-      return;
-    }
-    try {
-      const sa = JSON.parse(saRaw);
-      const token = await getGoogleServiceAccountToken(sa, [
-        'https://www.googleapis.com/auth/cloud-billing.readonly',
-        'https://www.googleapis.com/auth/monitoring.read',
-      ]);
-
-      const billingAccountId = process.env.GOOGLE_BILLING_ACCOUNT || '0105B9-2A78E4-FCB7E5';
-      const projectId = sa.project_id;
-
-      // Try Cloud Monitoring for billing metrics (current month)
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const monUrl = `https://monitoring.googleapis.com/v3/projects/${projectId}/timeSeries` +
-        `?filter=metric.type%3D%22billing.googleapis.com%2Fbilling%2Ftotal_charges%22` +
-        `&interval.startTime=${encodeURIComponent(monthStart)}` +
-        `&interval.endTime=${encodeURIComponent(now.toISOString())}` +
-        `&aggregation.alignmentPeriod=2592000s` +
-        `&aggregation.perSeriesAligner=ALIGN_SUM`;
-
-      const monResp = await fetchWithToken(monUrl, token);
-      if (monResp.timeSeries && monResp.timeSeries.length > 0) {
-        const points = monResp.timeSeries[0].points || [];
-        const total = points.reduce((s, p) => s + parseFloat(p.value?.doubleValue || 0), 0);
-        res.writeHead(200, CORS);
-        res.end(JSON.stringify({ source: 'monitoring', totalCharges: total.toFixed(4), currency: 'USD' }));
-        return;
-      }
-
-      // Fallback: try Billing Budgets API
-      const budgetUrl = `https://billingbudgets.googleapis.com/v1/billingAccounts/${billingAccountId}/budgets`;
-      const budgets = await fetchWithToken(budgetUrl, token);
-      if (budgets.budgets && budgets.budgets.length > 0) {
-        res.writeHead(200, CORS);
-        res.end(JSON.stringify({ source: 'budgets', budgets: budgets.budgets, currency: 'USD' }));
-        return;
-      }
-
-      res.writeHead(200, CORS);
-      res.end(JSON.stringify({ error: 'No billing data available — enable billing export or create a budget in Cloud Console' }));
-    } catch(e) {
-      console.error('billing-live error:', e.message);
-      res.writeHead(200, CORS);
-      res.end(JSON.stringify({ error: e.message }));
     }
     return;
   }
