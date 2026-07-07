@@ -587,8 +587,117 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── Live Google Cloud billing balance ──
+  if (parsed.pathname === '/billing-live') {
+    const saRaw = process.env.GOOGLE_BILLING_SA;
+    if (!saRaw) {
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify({ error: 'GOOGLE_BILLING_SA env var not set' }));
+      return;
+    }
+    try {
+      const sa = JSON.parse(saRaw);
+      const token = await getGoogleServiceAccountToken(sa, [
+        'https://www.googleapis.com/auth/cloud-billing.readonly',
+        'https://www.googleapis.com/auth/monitoring.read',
+      ]);
+
+      const billingAccountId = process.env.GOOGLE_BILLING_ACCOUNT || '0105B9-2A78E4-FCB7E5';
+      const projectId = sa.project_id;
+
+      // Try Cloud Monitoring for billing metrics (current month)
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const monUrl = `https://monitoring.googleapis.com/v3/projects/${projectId}/timeSeries` +
+        `?filter=metric.type%3D%22billing.googleapis.com%2Fbilling%2Ftotal_charges%22` +
+        `&interval.startTime=${encodeURIComponent(monthStart)}` +
+        `&interval.endTime=${encodeURIComponent(now.toISOString())}` +
+        `&aggregation.alignmentPeriod=2592000s` +
+        `&aggregation.perSeriesAligner=ALIGN_SUM`;
+
+      const monResp = await fetchWithToken(monUrl, token);
+      if (monResp.timeSeries && monResp.timeSeries.length > 0) {
+        const points = monResp.timeSeries[0].points || [];
+        const total = points.reduce((s, p) => s + parseFloat(p.value?.doubleValue || 0), 0);
+        res.writeHead(200, CORS);
+        res.end(JSON.stringify({ source: 'monitoring', totalCharges: total.toFixed(4), currency: 'USD' }));
+        return;
+      }
+
+      // Fallback: try Billing Budgets API
+      const budgetUrl = `https://billingbudgets.googleapis.com/v1/billingAccounts/${billingAccountId}/budgets`;
+      const budgets = await fetchWithToken(budgetUrl, token);
+      if (budgets.budgets && budgets.budgets.length > 0) {
+        res.writeHead(200, CORS);
+        res.end(JSON.stringify({ source: 'budgets', budgets: budgets.budgets, currency: 'USD' }));
+        return;
+      }
+
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify({ error: 'No billing data available — enable billing export or create a budget in Cloud Console' }));
+    } catch(e) {
+      console.error('billing-live error:', e.message);
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   res.writeHead(404); res.end('Not found');
 });
+
+// ── Google Service Account JWT helpers ──
+const crypto = require('crypto');
+
+async function getGoogleServiceAccountToken(sa, scopes) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    iss: sa.client_email,
+    scope: scopes.join(' '),
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  })).toString('base64url');
+  const sign = crypto.createSign('RSA-SHA256');
+  sign.write(`${header}.${payload}`);
+  sign.end();
+  const sig = sign.sign(sa.private_key, 'base64url');
+  const jwt = `${header}.${payload}.${sig}`;
+
+  const body = new URLSearchParams({
+    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+    assertion: jwt,
+  }).toString();
+  const resp = await new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'oauth2.googleapis.com', path: '/token', method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) },
+    }, r => { let buf=''; r.on('data',d=>buf+=d); r.on('end',()=>resolve(buf)); });
+    req.on('error', reject);
+    req.write(body); req.end();
+  });
+  const data = JSON.parse(resp);
+  if (!data.access_token) throw new Error(`Token error: ${JSON.stringify(data)}`);
+  return data.access_token;
+}
+
+function fetchWithToken(url, token) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const options = {
+      hostname: u.hostname, path: u.pathname + u.search, method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    };
+    const req = https.request(options, r => {
+      let buf = '';
+      r.on('data', d => buf += d);
+      r.on('end', () => { try { resolve(JSON.parse(buf)); } catch(e) { resolve({}); } });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 server.listen(PORT, () => {
   console.log('');

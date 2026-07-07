@@ -1902,6 +1902,19 @@ function calcEstimatedCost(nearbySearches, placeDetails){
 }
 
 async function getEstimatedBill(){
+  // Try live Google billing first
+  try {
+    const r = await fetch('/billing-live', {signal: AbortSignal.timeout(8000)});
+    const d = await r.json();
+    if (d.totalCharges !== undefined) {
+      return { live: true, total: parseFloat(d.totalCharges), source: 'Google Cloud Monitoring' };
+    }
+    if (d.budgets && d.budgets.length > 0) {
+      // Budget API: show budget amount (spend not directly available)
+      return { live: true, total: null, budgets: d.budgets };
+    }
+  } catch(e) {}
+  // Fall back to local estimate
   const ns = getMonthlyNearbySearches();
   const pd = await getMonthlyPlaceDetails();
   return calcEstimatedCost(ns, pd);
@@ -1910,18 +1923,23 @@ async function getEstimatedBill(){
 function updateScanLimitUI(bill){
   const el=document.getElementById('scanLimitBar');
   if(!el||!bill) return;
-  const pct=Math.min(100, Math.round((bill.total/MONTHLY_BILL_LIMIT)*100));
+  const total = bill.total ?? 0;
+  const pct=Math.min(100, Math.round((total/MONTHLY_BILL_LIMIT)*100));
   const color=pct>=90?'#ff5f5f':pct>=70?'#f5a623':'#4ade80';
-  const fmtCost=bill.total<0.005?'$0.00':'$'+bill.total.toFixed(2);
+  const fmtCost=total<0.005?'$0.00':'$'+total.toFixed(2);
+  const sourceLabel = bill.live ? '🔴 live' : 'est.';
+  const subLine = bill.live
+    ? `<span style="color:#4ade80;font-size:9px">● live from Google Cloud</span>`
+    : `<span style="font-size:9px;color:#555">${bill.nearbySearches||0} searches · ${bill.placeDetails||0} details · resets 1st</span>`;
   el.innerHTML=`
     <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-bottom:3px">
-      <span>Est. API charges this month</span>
+      <span>API charges this month <span style="color:#555">(${sourceLabel})</span></span>
       <span style="color:${color};font-weight:600">${fmtCost} / $${MONTHLY_BILL_LIMIT.toFixed(2)}</span>
     </div>
     <div style="background:#222;border-radius:3px;height:4px;overflow:hidden">
       <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;transition:width .3s"></div>
     </div>
-    <div style="font-size:9px;color:#555;margin-top:3px">${bill.nearbySearches} searches · ${bill.placeDetails} details · resets 1st of month</div>`;
+    <div style="margin-top:3px">${subLine}</div>`;
 }
 
 async function placeDetails(placeId,key,fallback){
