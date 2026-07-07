@@ -240,20 +240,36 @@ const server = http.createServer(async (req, res) => {
       const projectId = sa.project_id;
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const monUrl = `https://monitoring.googleapis.com/v3/projects/${projectId}/timeSeries` +
-        `?filter=metric.type%3D%22billing.googleapis.com%2Fbilling%2Ftotal_charges%22` +
-        `&interval.startTime=${encodeURIComponent(monthStart)}` +
-        `&interval.endTime=${encodeURIComponent(now.toISOString())}` +
-        `&aggregation.alignmentPeriod=2592000s` +
-        `&aggregation.perSeriesAligner=ALIGN_SUM`;
-      const monResp = await fetchWithToken(monUrl, token);
-      if (monResp.timeSeries && monResp.timeSeries.length > 0) {
-        const points = monResp.timeSeries[0].points || [];
-        const total = points.reduce((s, p) => s + parseFloat(p.value?.doubleValue || 0), 0);
+      // Try several metric names Google uses for billing
+      const metricCandidates = [
+        'billing.googleapis.com/billing/total_charges',
+        'serviceruntime.googleapis.com/billing/consumed_billable_resource_tokens',
+      ];
+      for (const metric of metricCandidates) {
+        const monUrl = `https://monitoring.googleapis.com/v3/projects/${projectId}/timeSeries` +
+          `?filter=metric.type%3D%22${encodeURIComponent(metric)}%22` +
+          `&interval.startTime=${encodeURIComponent(monthStart)}` +
+          `&interval.endTime=${encodeURIComponent(now.toISOString())}`;
+        const monResp = await fetchWithToken(monUrl, token);
+        if (monResp.timeSeries && monResp.timeSeries.length > 0) {
+          const points = monResp.timeSeries[0].points || [];
+          const total = points.reduce((s, p) => s + parseFloat(p.value?.doubleValue || p.value?.int64Value || 0), 0);
+          res.writeHead(200, CORS);
+          res.end(JSON.stringify({ source: 'monitoring', metric, totalCharges: total.toFixed(4), currency: 'USD' }));
+          return;
+        }
+      }
+
+      // Try Cloud Billing v1beta spend report
+      const spendUrl = `https://cloudbilling.googleapis.com/v1beta/billingAccounts/${billingAccountId}:getSpendingInformation`;
+      const spendResp = await fetchWithToken(spendUrl, token);
+      if (spendResp.currentMonthCharges !== undefined) {
         res.writeHead(200, CORS);
-        res.end(JSON.stringify({ source: 'monitoring', totalCharges: total.toFixed(4), currency: 'USD' }));
+        res.end(JSON.stringify({ source: 'spend_api', totalCharges: spendResp.currentMonthCharges, currency: 'USD' }));
         return;
       }
+
+      // Try budgets
       const budgetUrl = `https://billingbudgets.googleapis.com/v1/billingAccounts/${billingAccountId}/budgets`;
       const budgets = await fetchWithToken(budgetUrl, token);
       if (budgets.budgets && budgets.budgets.length > 0) {
@@ -261,8 +277,10 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ source: 'budgets', budgets: budgets.budgets, currency: 'USD' }));
         return;
       }
+
+      // Debug: return what we got back so we can diagnose
       res.writeHead(200, CORS);
-      res.end(JSON.stringify({ error: 'no_data', message: 'Service account connected but no billing metrics found — see setup notes' }));
+      res.end(JSON.stringify({ error: 'no_data', debug: { spendResp, budgets }, message: 'Service account connected but no billing data found' }));
     } catch(e) {
       console.error('billing-live error:', e.message);
       res.writeHead(200, CORS);
