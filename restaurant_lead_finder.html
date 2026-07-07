@@ -877,8 +877,8 @@ select:focus { border-color:var(--accent); }
 // ── State ──
 let map, gridLayers=[], selectedBounds={}, allLeads=[], gmarkers=[], scanning=false;
 let extReady = false;
-let igFetchMode = 'rapidapi';
-const MONTHLY_SCAN_LIMIT = 1000; // max Place Details calls/month (stays within free Contact Data cap) // 'ext' or 'rapidapi' — set at scan start by session check
+let igFetchMode = 'rapidapi'; // 'ext' or 'rapidapi' — set at scan start by session check
+const MONTHLY_BILL_LIMIT = 5.00; // stop scanning if estimated charges exceed this amount
 let activeFilter = 'all';
 let currentScanIds = new Set(); // place_ids found in the most recent scan
 let showCurrentScanOnly = false;
@@ -1054,7 +1054,7 @@ function extFetch(type, handle, name, city, url, bizType) {
   if(profile?.tt_cookie) document.getElementById('ttCookieInput').value = profile.tt_cookie;
   await loadAllLeads();
   if(allLeads.length) document.getElementById('exportBtn').style.display='block';
-  getMonthlyScansUsed().then(updateScanLimitUI);
+  getEstimatedBill().then(updateScanLimitUI);
   setStatus('Click grid squares to select zones, then hit Scan.');
 })();
 
@@ -1650,11 +1650,11 @@ async function startScan(debugMode=false){
   outer: for(const tile of subTiles){
     const {lat, lng, r:radius} = tile;
 
-    // ── Monthly scan limit guard ──
-    const monthlyUsed = await getMonthlyScansUsed();
-    updateScanLimitUI(monthlyUsed);
-    if(monthlyUsed >= MONTHLY_SCAN_LIMIT){
-      setStatus(`⛔ Monthly scan limit (${MONTHLY_SCAN_LIMIT.toLocaleString()} places) reached — scanning stopped to protect your API budget. Resets on the 1st.`);
+    // ── Billing limit guard ──
+    const bill = await getEstimatedBill();
+    updateScanLimitUI(bill);
+    if(bill.total >= MONTHLY_BILL_LIMIT){
+      setStatus(`⛔ Estimated charges hit $${bill.total.toFixed(2)} (limit $${MONTHLY_BILL_LIMIT.toFixed(2)}) — scanning stopped to protect your API budget. Resets on the 1st.`);
       break outer;
     }
 
@@ -1662,6 +1662,7 @@ async function startScan(debugMode=false){
     dbg(`chunk ${done+1}: lat=${lat.toFixed(4)} lng=${lng.toFixed(4)} r=${Math.round(radius)}`);
 
     const places = await nearbySearch(lat, lng, radius, apiKey);
+    if(places.length > 0) logNearbySearchCall();
 
     for(const place of places){
       if(isChain(place.name)){ dbg(`skipping chain: ${place.name}`); continue; }
@@ -1866,30 +1867,61 @@ async function nearbySearch(lat,lng,radius,key){
   }
 }
 
-async function getMonthlyScansUsed(){
-  try{
-    const start = new Date(); start.setDate(1); start.setHours(0,0,0,0);
-    const {count} = await supabaseClient
-      .from('scan_cache')
-      .select('*', {count:'exact', head:true})
-      .gte('scanned_at', start.getTime());
-    return count || 0;
-  } catch(e){ return 0; }
+// ── API call tracking (localStorage for Nearby Search, Supabase for Place Details) ──
+function _monthKey(){ const d=new Date(); return `${d.getFullYear()}_${d.getMonth()}`; }
+
+function logNearbySearchCall(){
+  const k=`ns_${_monthKey()}`;
+  const n=(parseInt(localStorage.getItem(k)||'0'))+1;
+  localStorage.setItem(k, n);
+  return n;
+}
+function getMonthlyNearbySearches(){
+  return parseInt(localStorage.getItem(`ns_${_monthKey()}`)||'0');
 }
 
-function updateScanLimitUI(used){
-  const el = document.getElementById('scanLimitBar');
-  if(!el) return;
-  const pct = Math.min(100, Math.round((used / MONTHLY_SCAN_LIMIT) * 100));
-  const color = pct >= 90 ? '#ff5f5f' : pct >= 70 ? '#f5a623' : '#4ade80';
-  el.innerHTML = `
+async function getMonthlyPlaceDetails(){
+  try{
+    const start=new Date(); start.setDate(1); start.setHours(0,0,0,0);
+    const {count}=await supabaseClient
+      .from('scan_cache')
+      .select('*',{count:'exact',head:true})
+      .gte('scanned_at', start.getTime());
+    return count||0;
+  }catch(e){ return 0; }
+}
+
+function calcEstimatedCost(nearbySearches, placeDetails){
+  // Free caps per month (legacy Places API, as of March 2025)
+  const NS_FREE=5000, PD_FREE=5000, CD_FREE=1000;
+  const NS_RATE=0.032, PD_RATE=0.017, CD_RATE=0.003;
+  const nsCost  = Math.max(0, nearbySearches - NS_FREE) * NS_RATE;
+  const pdCost  = Math.max(0, placeDetails   - PD_FREE) * PD_RATE;
+  const cdCost  = Math.max(0, placeDetails   - CD_FREE) * CD_RATE;
+  return { total: nsCost+pdCost+cdCost, nearbySearches, placeDetails, nsCost, pdCost, cdCost };
+}
+
+async function getEstimatedBill(){
+  const ns = getMonthlyNearbySearches();
+  const pd = await getMonthlyPlaceDetails();
+  return calcEstimatedCost(ns, pd);
+}
+
+function updateScanLimitUI(bill){
+  const el=document.getElementById('scanLimitBar');
+  if(!el||!bill) return;
+  const pct=Math.min(100, Math.round((bill.total/MONTHLY_BILL_LIMIT)*100));
+  const color=pct>=90?'#ff5f5f':pct>=70?'#f5a623':'#4ade80';
+  const fmtCost=bill.total<0.005?'$0.00':'$'+bill.total.toFixed(2);
+  el.innerHTML=`
     <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-bottom:3px">
-      <span>API usage this month</span>
-      <span style="color:${color};font-weight:600">${used.toLocaleString()} / ${MONTHLY_SCAN_LIMIT.toLocaleString()}</span>
+      <span>Est. API charges this month</span>
+      <span style="color:${color};font-weight:600">${fmtCost} / $${MONTHLY_BILL_LIMIT.toFixed(2)}</span>
     </div>
     <div style="background:#222;border-radius:3px;height:4px;overflow:hidden">
       <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;transition:width .3s"></div>
-    </div>`;
+    </div>
+    <div style="font-size:9px;color:#555;margin-top:3px">${bill.nearbySearches} searches · ${bill.placeDetails} details · resets 1st of month</div>`;
 }
 
 async function placeDetails(placeId,key,fallback){
