@@ -233,7 +233,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const sa = JSON.parse(saRaw);
       const token = await getGoogleServiceAccountToken(sa, [
-        'https://www.googleapis.com/auth/cloud-billing.readonly',
+        'https://www.googleapis.com/auth/cloud-billing',
         'https://www.googleapis.com/auth/monitoring.read',
       ]);
       const billingAccountId = process.env.GOOGLE_BILLING_ACCOUNT || '0105B9-2A78E4-FCB7E5';
