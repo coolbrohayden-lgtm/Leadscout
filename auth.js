@@ -39,17 +39,6 @@ async function requireAuth() {
     return null;
   }
   currentUser = user;
-
-  // Gate: new signups need admin approval before they can use the app.
-  // Admin is always approved implicitly.
-  if (user.email !== ADMIN_EMAIL) {
-    const { data: profile } = await supabaseClient.from('user_profiles').select('approved').eq('id', user.id).single();
-    if (!profile || profile.approved !== true) {
-      window.location.href = '/pending';
-      return null;
-    }
-  }
-
   return user;
 }
 
