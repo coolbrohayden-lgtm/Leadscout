@@ -31,39 +31,48 @@ header{display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;backg
 .layout{display:flex;flex:1;overflow:hidden;}
 
 /* Left panel */
-.panel{width:280px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.panel-section{padding:12px 14px;border-bottom:1px solid var(--border);}
-.panel-section h3{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
-
-/* Search type chips */
-.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
-.type-chip{padding:8px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;text-align:center;transition:all .15s;}
+.panel{width:320px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.panel-top{padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.panel-top h3{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.type-chip{padding:7px 6px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;text-align:center;transition:all .15s;}
 .type-chip:hover{border-color:var(--accent);color:var(--text);}
 .type-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
 
-/* County picker */
-.county-scroll{flex:1;overflow-y:auto;padding:8px 0;}
-.region-header{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 4px;position:sticky;top:0;background:var(--surface);z-index:1;}
-.region-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
-.region-all{font-size:10px;color:var(--accent);cursor:pointer;background:none;border:none;font-family:inherit;padding:0;}
-.region-all:hover{text-decoration:underline;}
-.county-list{padding:0 14px 6px;}
-.county-item{display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;}
-.county-item input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;flex-shrink:0;cursor:pointer;}
-.county-item label{font-size:12px;color:var(--text);cursor:pointer;user-select:none;}
+/* Map */
+.map-wrap{flex:1;position:relative;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;}
+#flMap{width:100%;height:100%;}
+.county-path{fill:var(--surface3);stroke:var(--border-light);stroke-width:0.5;cursor:pointer;transition:fill .12s;}
+.county-path:hover{fill:#252830;}
+.county-path.selected{fill:rgba(94,106,210,.45);stroke:#5e6ad2;stroke-width:1;}
+.county-path.scanned{fill:rgba(61,214,140,.12);stroke:#3dd68c;stroke-width:0.8;}
+.county-path.selected.scanned{fill:rgba(94,106,210,.45);stroke:#5e6ad2;stroke-width:1;}
+.county-path.all-scanned{fill:rgba(61,214,140,.18);stroke:#3dd68c;stroke-width:1;}
+#mapTooltip{position:absolute;background:rgba(16,17,20,.95);border:1px solid var(--border-light);border-radius:6px;padding:6px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;}
+#mapTooltip .tt-name{font-weight:700;color:var(--text);margin-bottom:3px;}
+#mapTooltip .tt-status{color:var(--muted);font-size:10px;}
+#mapLoading{position:absolute;color:var(--muted);font-size:12px;}
+
+/* Map legend + controls */
+.map-footer{padding:8px 12px;border-top:1px solid var(--border);flex-shrink:0;}
+.legend{display:flex;gap:12px;margin-bottom:7px;}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);}
+.leg-dot{width:10px;height:10px;border-radius:2px;border:1px solid;}
+.map-btns{display:flex;gap:6px;margin-bottom:8px;}
+.force-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);}
+.force-row input{accent-color:var(--accent);}
 
 /* Scan controls */
-.scan-controls{padding:12px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
-.radius-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);}
+.scan-controls{padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0;}
+.radius-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-bottom:8px;}
 .radius-row input{flex:1;accent-color:var(--accent);}
 .radius-val{min-width:32px;text-align:right;color:var(--text);font-weight:600;}
-#scanBtn{width:100%;padding:10px;font-size:13px;}
-.progress-wrap{display:none;flex-direction:column;gap:4px;}
+.progress-wrap{display:none;flex-direction:column;gap:4px;margin-top:6px;}
 .progress-bar-outer{height:4px;background:var(--surface3);border-radius:2px;overflow:hidden;}
 .progress-bar-inner{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;}
 .progress-text{font-size:11px;color:var(--muted);}
 
-/* Main results area */
+/* Main results */
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .result-count{font-size:12px;color:var(--muted);flex:1;}
@@ -80,11 +89,11 @@ td.cat .cat-badge{display:inline-block;padding:2px 7px;border-radius:20px;font-s
 .cat-roofing{background:rgba(244,112,103,.15);color:#f47067;}
 .cat-windows{background:rgba(94,106,210,.15);color:#8b96e8;}
 .cat-shutters{background:rgba(61,214,140,.15);color:#3dd68c;}
+.cat-hvac{background:rgba(255,180,50,.15);color:#ffb432;}
 td.phone a{color:var(--text);text-decoration:none;}
 td.phone a:hover{color:var(--accent);}
 td.email-cell{max-width:180px;word-break:break-all;}
 td.email-cell a{color:var(--accent);text-decoration:none;font-size:11px;}
-td.email-cell .scraping{color:var(--muted);font-size:11px;font-style:italic;}
 td.web a{color:var(--accent);text-decoration:none;font-size:11px;max-width:140px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 td.addr{color:var(--muted);font-size:11px;max-width:160px;}
 td.actions{white-space:nowrap;}
@@ -108,10 +117,8 @@ td.actions{white-space:nowrap;}
 </header>
 
 <div class="layout">
-  <!-- Left panel -->
   <aside class="panel">
-    <!-- Search type -->
-    <div class="panel-section">
+    <div class="panel-top">
       <h3>What to find</h3>
       <div class="type-grid">
         <button class="type-chip active" data-type="roofing" onclick="toggleType(this)">🏠 Roofing</button>
@@ -121,20 +128,39 @@ td.actions{white-space:nowrap;}
       </div>
     </div>
 
-    <!-- County picker -->
-    <div class="panel-section" style="padding-bottom:6px;">
-      <h3>Florida Counties</h3>
+    <div class="map-wrap">
+      <svg id="flMap" viewBox="0 0 300 380" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="mapTooltip">
+        <div class="tt-name" id="ttName"></div>
+        <div class="tt-status" id="ttStatus"></div>
+      </div>
+      <div id="mapLoading">Loading map…</div>
     </div>
-    <div class="county-scroll" id="countyScroll"></div>
 
-    <!-- Scan controls -->
+    <div class="map-footer">
+      <div class="legend">
+        <div class="leg-item"><div class="leg-dot" style="background:rgba(94,106,210,.45);border-color:#5e6ad2"></div> Selected</div>
+        <div class="leg-item"><div class="leg-dot" style="background:rgba(61,214,140,.18);border-color:#3dd68c"></div> Already scanned</div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--surface3);border-color:var(--border-light)"></div> Not scanned</div>
+      </div>
+      <div class="map-btns">
+        <button class="btn btn-sm" onclick="selectAll()">Select All</button>
+        <button class="btn btn-sm" onclick="clearSelection()">Clear</button>
+        <button class="btn btn-sm" onclick="clearScanCache()" style="margin-left:auto;color:var(--muted)">Reset cache</button>
+      </div>
+      <div class="force-row">
+        <input type="checkbox" id="forceRescan"/>
+        <label for="forceRescan">Re-scan already scanned counties</label>
+      </div>
+    </div>
+
     <div class="scan-controls">
       <div class="radius-row">
         <span>Search radius</span>
         <input type="range" id="radiusSlider" min="10" max="50" value="25" step="5" oninput="document.getElementById('radiusVal').textContent=this.value+'km'"/>
         <span class="radius-val" id="radiusVal">25km</span>
       </div>
-      <button class="btn btn-green" id="scanBtn" onclick="startScan()">Scan Selected Counties</button>
+      <button class="btn btn-green" id="scanBtn" style="width:100%;padding:10px;font-size:13px;" onclick="startScan()">Scan Selected Counties</button>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-bar-outer"><div class="progress-bar-inner" id="progressBar" style="width:0%"></div></div>
         <div class="progress-text" id="progressText">Starting…</div>
@@ -142,29 +168,22 @@ td.actions{white-space:nowrap;}
     </div>
   </aside>
 
-  <!-- Results -->
   <main class="main">
     <div class="toolbar">
-      <span class="result-count" id="resultCount">Select counties and click Scan</span>
+      <span class="result-count" id="resultCount">Click counties on the map, then Scan</span>
       <button class="btn btn-sm" onclick="exportCSV()">Export CSV</button>
       <button class="btn btn-sm btn-green" onclick="saveAll()">Save All</button>
     </div>
     <div class="table-wrap">
       <div class="empty-state" id="emptyState">
         <div class="icon">🏠</div>
-        <p>Select counties on the left and hit Scan</p>
+        <p>Click counties on the Florida map, then hit Scan</p>
       </div>
       <table id="resultsTable" style="display:none">
         <thead>
           <tr>
-            <th>Company</th>
-            <th>County</th>
-            <th>Type</th>
-            <th>Phone</th>
-            <th>Email</th>
-            <th>Website</th>
-            <th>Address</th>
-            <th></th>
+            <th>Company</th><th>County</th><th>Type</th><th>Phone</th>
+            <th>Email</th><th>Website</th><th>Address</th><th></th>
           </tr>
         </thead>
         <tbody id="resultsTbody"></tbody>
@@ -174,163 +193,261 @@ td.actions{white-space:nowrap;}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script src="/auth.js"></script>
 <script>
-// ── Florida counties grouped by region ──
-const FL_COUNTIES = [
-  // Panhandle
-  {name:'Escambia',lat:30.6354,lng:-87.3397,region:'Panhandle'},
-  {name:'Santa Rosa',lat:30.6924,lng:-87.0112,region:'Panhandle'},
-  {name:'Okaloosa',lat:30.5953,lng:-86.6602,region:'Panhandle'},
-  {name:'Walton',lat:30.5871,lng:-86.1527,region:'Panhandle'},
-  {name:'Holmes',lat:30.8665,lng:-85.8174,region:'Panhandle'},
-  {name:'Washington',lat:30.6085,lng:-85.6524,region:'Panhandle'},
-  {name:'Bay',lat:30.2383,lng:-85.6296,region:'Panhandle'},
-  {name:'Jackson',lat:30.7882,lng:-85.2141,region:'Panhandle'},
-  {name:'Calhoun',lat:30.4078,lng:-85.1836,region:'Panhandle'},
-  {name:'Gulf',lat:29.9213,lng:-85.2246,region:'Panhandle'},
-  {name:'Liberty',lat:30.2368,lng:-84.8877,region:'Panhandle'},
-  {name:'Franklin',lat:29.8308,lng:-84.7989,region:'Panhandle'},
-  {name:'Gadsden',lat:30.5762,lng:-84.6132,region:'Panhandle'},
-  // North Florida
-  {name:'Leon',lat:30.438,lng:-84.2807,region:'North Florida'},
-  {name:'Wakulla',lat:30.1542,lng:-84.3546,region:'North Florida'},
-  {name:'Jefferson',lat:30.4253,lng:-83.8949,region:'North Florida'},
-  {name:'Madison',lat:30.4669,lng:-83.4723,region:'North Florida'},
-  {name:'Taylor',lat:30.0571,lng:-83.6135,region:'North Florida'},
-  {name:'Hamilton',lat:30.4975,lng:-82.9556,region:'North Florida'},
-  {name:'Suwannee',lat:30.1972,lng:-82.9924,region:'North Florida'},
-  {name:'Lafayette',lat:29.994,lng:-83.2003,region:'North Florida'},
-  {name:'Dixie',lat:29.581,lng:-83.1824,region:'North Florida'},
-  {name:'Columbia',lat:30.2218,lng:-82.6157,region:'North Florida'},
-  {name:'Gilchrist',lat:29.7238,lng:-82.796,region:'North Florida'},
-  {name:'Alachua',lat:29.7938,lng:-82.3675,region:'North Florida'},
-  {name:'Union',lat:30.0376,lng:-82.3734,region:'North Florida'},
-  {name:'Bradford',lat:29.9432,lng:-82.17,region:'North Florida'},
-  {name:'Baker',lat:30.3308,lng:-82.2942,region:'North Florida'},
-  {name:'Nassau',lat:30.6123,lng:-81.7693,region:'North Florida'},
-  {name:'Duval',lat:30.3322,lng:-81.6557,region:'North Florida'},
-  {name:'Clay',lat:29.993,lng:-81.8609,region:'North Florida'},
-  {name:'Putnam',lat:29.6238,lng:-81.7579,region:'North Florida'},
-  {name:'St. Johns',lat:29.9199,lng:-81.434,region:'North Florida'},
-  {name:'Flagler',lat:29.4722,lng:-81.2813,region:'North Florida'},
-  {name:'Levy',lat:29.3059,lng:-82.7872,region:'North Florida'},
-  {name:'Marion',lat:29.2109,lng:-82.0515,region:'North Florida'},
-  {name:'Volusia',lat:29.0278,lng:-81.1716,region:'North Florida'},
-  // Central Florida
-  {name:'Citrus',lat:28.8494,lng:-82.5185,region:'Central Florida'},
-  {name:'Hernando',lat:28.5556,lng:-82.4643,region:'Central Florida'},
-  {name:'Sumter',lat:28.7017,lng:-82.0769,region:'Central Florida'},
-  {name:'Lake',lat:28.7694,lng:-81.7718,region:'Central Florida'},
-  {name:'Pasco',lat:28.3062,lng:-82.4346,region:'Central Florida'},
-  {name:'Seminole',lat:28.7161,lng:-81.208,region:'Central Florida'},
-  {name:'Orange',lat:28.5383,lng:-81.3792,region:'Central Florida'},
-  {name:'Osceola',lat:28.0639,lng:-81.0727,region:'Central Florida'},
-  {name:'Polk',lat:27.9554,lng:-81.6993,region:'Central Florida'},
-  {name:'Hillsborough',lat:27.9654,lng:-82.2442,region:'Central Florida'},
-  {name:'Pinellas',lat:27.8765,lng:-82.7179,region:'Central Florida'},
-  {name:'Manatee',lat:27.4799,lng:-82.3449,region:'Central Florida'},
-  {name:'Hardee',lat:27.4943,lng:-81.8152,region:'Central Florida'},
-  {name:'Highlands',lat:27.3433,lng:-81.3404,region:'Central Florida'},
-  {name:'Okeechobee',lat:27.3944,lng:-80.8316,region:'Central Florida'},
-  // East Coast
-  {name:'Brevard',lat:28.2639,lng:-80.7214,region:'East Coast'},
-  {name:'Indian River',lat:27.6891,lng:-80.5463,region:'East Coast'},
-  {name:'St. Lucie',lat:27.3734,lng:-80.4379,region:'East Coast'},
-  {name:'Martin',lat:27.0715,lng:-80.3876,region:'East Coast'},
-  // Southwest Florida
-  {name:'Sarasota',lat:27.1847,lng:-82.3679,region:'Southwest Florida'},
-  {name:'Charlotte',lat:26.9342,lng:-81.9447,region:'Southwest Florida'},
-  {name:'De Soto',lat:27.1876,lng:-81.8244,region:'Southwest Florida'},
-  {name:'Glades',lat:26.9558,lng:-81.2067,region:'Southwest Florida'},
-  {name:'Hendry',lat:26.4985,lng:-81.2393,region:'Southwest Florida'},
-  {name:'Lee',lat:26.5629,lng:-81.7068,region:'Southwest Florida'},
-  {name:'Collier',lat:26.1148,lng:-81.3973,region:'Southwest Florida'},
-  // South Florida
-  {name:'Palm Beach',lat:26.6463,lng:-80.3995,region:'South Florida'},
-  {name:'Broward',lat:26.122,lng:-80.3972,region:'South Florida'},
-  {name:'Miami-Dade',lat:25.5516,lng:-80.6327,region:'South Florida'},
-  {name:'Monroe',lat:25.0,lng:-81.0,region:'South Florida'},
-];
 
-const SEARCH_KEYWORDS = {
-  roofing:  'roofing contractor',
-  windows:  'window replacement company',
-  shutters: 'hurricane shutters',
-  hvac:     'HVAC contractor',
+// ── Florida county centroids (for API searching) ──
+const FL_COUNTIES = [
+  {name:'Escambia',lat:30.6354,lng:-87.3397},{name:'Santa Rosa',lat:30.6924,lng:-87.0112},
+  {name:'Okaloosa',lat:30.5953,lng:-86.6602},{name:'Walton',lat:30.5871,lng:-86.1527},
+  {name:'Holmes',lat:30.8665,lng:-85.8174},{name:'Washington',lat:30.6085,lng:-85.6524},
+  {name:'Bay',lat:30.2383,lng:-85.6296},{name:'Jackson',lat:30.7882,lng:-85.2141},
+  {name:'Calhoun',lat:30.4078,lng:-85.1836},{name:'Gulf',lat:29.9213,lng:-85.2246},
+  {name:'Liberty',lat:30.2368,lng:-84.8877},{name:'Franklin',lat:29.8308,lng:-84.7989},
+  {name:'Gadsden',lat:30.5762,lng:-84.6132},{name:'Leon',lat:30.438,lng:-84.2807},
+  {name:'Wakulla',lat:30.1542,lng:-84.3546},{name:'Jefferson',lat:30.4253,lng:-83.8949},
+  {name:'Madison',lat:30.4669,lng:-83.4723},{name:'Taylor',lat:30.0571,lng:-83.6135},
+  {name:'Hamilton',lat:30.4975,lng:-82.9556},{name:'Suwannee',lat:30.1972,lng:-82.9924},
+  {name:'Lafayette',lat:29.994,lng:-83.2003},{name:'Dixie',lat:29.581,lng:-83.1824},
+  {name:'Columbia',lat:30.2218,lng:-82.6157},{name:'Gilchrist',lat:29.7238,lng:-82.796},
+  {name:'Alachua',lat:29.7938,lng:-82.3675},{name:'Union',lat:30.0376,lng:-82.3734},
+  {name:'Bradford',lat:29.9432,lng:-82.17},{name:'Baker',lat:30.3308,lng:-82.2942},
+  {name:'Nassau',lat:30.6123,lng:-81.7693},{name:'Duval',lat:30.3322,lng:-81.6557},
+  {name:'Clay',lat:29.993,lng:-81.8609},{name:'Putnam',lat:29.6238,lng:-81.7579},
+  {name:'St. Johns',lat:29.9199,lng:-81.434},{name:'Flagler',lat:29.4722,lng:-81.2813},
+  {name:'Levy',lat:29.3059,lng:-82.7872},{name:'Marion',lat:29.2109,lng:-82.0515},
+  {name:'Volusia',lat:29.0278,lng:-81.1716},{name:'Citrus',lat:28.8494,lng:-82.5185},
+  {name:'Hernando',lat:28.5556,lng:-82.4643},{name:'Sumter',lat:28.7017,lng:-82.0769},
+  {name:'Lake',lat:28.7694,lng:-81.7718},{name:'Pasco',lat:28.3062,lng:-82.4346},
+  {name:'Seminole',lat:28.7161,lng:-81.208},{name:'Orange',lat:28.5383,lng:-81.3792},
+  {name:'Osceola',lat:28.0639,lng:-81.0727},{name:'Polk',lat:27.9554,lng:-81.6993},
+  {name:'Hillsborough',lat:27.9654,lng:-82.2442},{name:'Pinellas',lat:27.8765,lng:-82.7179},
+  {name:'Manatee',lat:27.4799,lng:-82.3449},{name:'Hardee',lat:27.4943,lng:-81.8152},
+  {name:'Highlands',lat:27.3433,lng:-81.3404},{name:'Okeechobee',lat:27.3944,lng:-80.8316},
+  {name:'Brevard',lat:28.2639,lng:-80.7214},{name:'Indian River',lat:27.6891,lng:-80.5463},
+  {name:'St. Lucie',lat:27.3734,lng:-80.4379},{name:'Martin',lat:27.0715,lng:-80.3876},
+  {name:'Sarasota',lat:27.1847,lng:-82.3679},{name:'Charlotte',lat:26.9342,lng:-81.9447},
+  {name:'De Soto',lat:27.1876,lng:-81.8244},{name:'Glades',lat:26.9558,lng:-81.2067},
+  {name:'Hendry',lat:26.4985,lng:-81.2393},{name:'Lee',lat:26.5629,lng:-81.7068},
+  {name:'Collier',lat:26.1148,lng:-81.3973},{name:'Palm Beach',lat:26.6463,lng:-80.3995},
+  {name:'Broward',lat:26.122,lng:-80.3972},{name:'Miami-Dade',lat:25.5516,lng:-80.6327},
+  {name:'Monroe',lat:25.0,lng:-81.0},
+];
+const COUNTY_BY_NAME = Object.fromEntries(FL_COUNTIES.map(c => [c.name, c]));
+
+// Florida county FIPS → county name
+const FIPS_TO_COUNTY = {
+  '12001':'Alachua','12003':'Baker','12005':'Bay','12007':'Bradford',
+  '12009':'Brevard','12011':'Broward','12013':'Calhoun','12015':'Charlotte',
+  '12017':'Citrus','12019':'Clay','12021':'Collier','12023':'Columbia',
+  '12027':'De Soto','12029':'Dixie','12031':'Duval','12033':'Escambia',
+  '12035':'Flagler','12037':'Franklin','12039':'Gadsden','12041':'Gilchrist',
+  '12043':'Glades','12045':'Gulf','12047':'Hamilton','12049':'Hardee',
+  '12051':'Hendry','12053':'Hernando','12055':'Highlands','12057':'Hillsborough',
+  '12059':'Holmes','12061':'Indian River','12063':'Jackson','12065':'Jefferson',
+  '12067':'Lafayette','12069':'Lake','12071':'Lee','12073':'Leon',
+  '12075':'Levy','12077':'Liberty','12079':'Madison','12081':'Manatee',
+  '12083':'Marion','12085':'Martin','12086':'Miami-Dade','12087':'Monroe',
+  '12089':'Nassau','12091':'Okaloosa','12093':'Okeechobee','12095':'Orange',
+  '12097':'Osceola','12099':'Palm Beach','12101':'Pasco','12103':'Pinellas',
+  '12105':'Polk','12107':'Putnam','12109':'St. Johns','12111':'St. Lucie',
+  '12113':'Santa Rosa','12115':'Sarasota','12117':'Seminole','12119':'Sumter',
+  '12121':'Suwannee','12123':'Taylor','12125':'Union','12127':'Volusia',
+  '12129':'Wakulla','12131':'Walton','12133':'Washington',
 };
 
+const SEARCH_KEYWORDS = {
+  roofing:'roofing contractor',
+  windows:'window replacement company',
+  shutters:'hurricane shutters',
+  hvac:'HVAC contractor',
+};
 const CAT_LABELS = {roofing:'Roofing',windows:'Windows',shutters:'Storm Shutters',hvac:'HVAC'};
 
 // ── State ──
-let results = [];       // {place_id, name, county, category, phone, email, website, address, saved}
+let results = [];
 let seenIds = new Set();
+let selectedCounties = new Set();
 let scanning = false;
 let stopFlag = false;
 let apiKey = null;
+let pathEls = {}; // countyName → SVG path element
 
-// ── Build county picker ──
-(function buildCountyPicker() {
-  const scroll = document.getElementById('countyScroll');
-  const regions = [...new Set(FL_COUNTIES.map(c => c.region))];
-  regions.forEach(region => {
-    const counties = FL_COUNTIES.filter(c => c.region === region);
-    const hdr = document.createElement('div');
-    hdr.className = 'region-header';
-    hdr.innerHTML = `<span class="region-label">${region}</span><button class="region-all" onclick="selectRegion('${region}',this)">Select all</button>`;
-    scroll.appendChild(hdr);
-    const list = document.createElement('div');
-    list.className = 'county-list';
-    counties.forEach(c => {
-      const item = document.createElement('div');
-      item.className = 'county-item';
-      const id = 'c_' + c.name.replace(/[^a-z]/gi,'_');
-      item.innerHTML = `<input type="checkbox" id="${id}" data-county="${c.name}"/><label for="${id}">${c.name}</label>`;
-      list.appendChild(item);
-    });
-    scroll.appendChild(list);
-  });
-})();
-
-function selectRegion(region, btn) {
-  const counties = FL_COUNTIES.filter(c => c.region === region);
-  const allChecked = counties.every(c => {
-    const id = 'c_' + c.name.replace(/[^a-z]/gi,'_');
-    return document.getElementById(id)?.checked;
-  });
-  counties.forEach(c => {
-    const id = 'c_' + c.name.replace(/[^a-z]/gi,'_');
-    const el = document.getElementById(id);
-    if (el) el.checked = !allChecked;
-  });
-  btn.textContent = allChecked ? 'Select all' : 'Deselect all';
+// ── Scan cache (localStorage, resets monthly) ──
+function scanKey(county, type) {
+  const d = new Date();
+  return `cl_${county}_${type}_${d.getFullYear()}_${d.getMonth()}`;
+}
+function markScanned(county, type) {
+  localStorage.setItem(scanKey(county, type), '1');
+  updateCountyAppearance(county);
+}
+function isScanned(county, type) {
+  return !!localStorage.getItem(scanKey(county, type));
+}
+function allTypesScanned(county) {
+  return getSelectedTypes().every(t => isScanned(county, t));
+}
+function clearScanCache() {
+  const keys = Object.keys(localStorage).filter(k => k.startsWith('cl_'));
+  keys.forEach(k => localStorage.removeItem(k));
+  Object.keys(pathEls).forEach(name => updateCountyAppearance(name));
+  alert('Scan cache cleared — all counties will be re-scanned.');
 }
 
+// ── Map ──
+async function loadMap() {
+  try {
+    const topo = await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json').then(r => r.json());
+    const allCounties = topojson.feature(topo, topo.objects.counties);
+    const flFeatures = allCounties.features.filter(f => {
+      const fips = String(f.id).padStart(5, '0');
+      return fips.startsWith('12');
+    });
+
+    // Simple Mercator projection fitted to Florida bounds
+    // Florida: lng -87.6 to -80.0, lat 24.4 to 31.1
+    const W = 300, H = 380;
+    const minLng = -87.7, maxLng = -79.9, minLat = 24.3, maxLat = 31.2;
+    const scaleX = W / (maxLng - minLng);
+    const scaleY = H / (maxLat - minLat);
+    const scale = Math.min(scaleX, scaleY) * 0.92;
+    const offX = (W - (maxLng - minLng) * scale) / 2;
+    const offY = (H - (maxLat - minLat) * scale) / 2;
+
+    function project([lng, lat]) {
+      return [offX + (lng - minLng) * scale, offY + (maxLat - lat) * scale];
+    }
+
+    function coordsToPath(coords) {
+      return coords.map((ring, ri) =>
+        ring.map((pt, i) => {
+          const [x, y] = project(pt);
+          return (i === 0 ? 'M' : 'L') + x.toFixed(2) + ',' + y.toFixed(2);
+        }).join(' ') + ' Z'
+      ).join(' ');
+    }
+
+    function featureToD(feature) {
+      const geo = feature.geometry;
+      if (!geo) return '';
+      if (geo.type === 'Polygon') return coordsToPath(geo.coordinates);
+      if (geo.type === 'MultiPolygon') return geo.coordinates.map(coordsToPath).join(' ');
+      return '';
+    }
+
+    const svg = document.getElementById('flMap');
+    svg.innerHTML = '';
+
+    flFeatures.forEach(feature => {
+      const fips = String(feature.id).padStart(5, '0');
+      const countyName = FIPS_TO_COUNTY[fips];
+      if (!countyName) return;
+      const d = featureToD(feature);
+      if (!d) return;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('data-county', countyName);
+      path.className.baseVal = 'county-path';
+      pathEls[countyName] = path;
+
+      path.addEventListener('click', () => toggleCounty(countyName));
+      path.addEventListener('mouseenter', e => showTooltip(e, countyName));
+      path.addEventListener('mouseleave', hideTooltip);
+
+      svg.appendChild(path);
+      updateCountyAppearance(countyName);
+    });
+
+    document.getElementById('mapLoading').style.display = 'none';
+  } catch(e) {
+    document.getElementById('mapLoading').textContent = 'Map failed to load.';
+  }
+}
+
+function updateCountyAppearance(countyName) {
+  const el = pathEls[countyName];
+  if (!el) return;
+  const sel = selectedCounties.has(countyName);
+  const types = getSelectedTypes();
+  const anyScanned = types.some(t => isScanned(countyName, t));
+  const allScanned = types.length > 0 && types.every(t => isScanned(countyName, t));
+
+  el.className.baseVal = 'county-path' +
+    (sel ? ' selected' : '') +
+    (allScanned ? ' all-scanned' : anyScanned ? ' scanned' : '');
+}
+
+function toggleCounty(name) {
+  if (selectedCounties.has(name)) selectedCounties.delete(name);
+  else selectedCounties.add(name);
+  updateCountyAppearance(name);
+}
+
+function selectAll() {
+  FL_COUNTIES.forEach(c => selectedCounties.add(c.name));
+  Object.keys(pathEls).forEach(updateCountyAppearance);
+}
+
+function clearSelection() {
+  selectedCounties.clear();
+  Object.keys(pathEls).forEach(updateCountyAppearance);
+}
+
+function showTooltip(e, countyName) {
+  const tt = document.getElementById('mapTooltip');
+  const types = getSelectedTypes();
+  const statusLines = types.map(t => {
+    const done = isScanned(countyName, t);
+    return `${done ? '✓' : '○'} ${CAT_LABELS[t]}`;
+  });
+  document.getElementById('ttName').textContent = countyName + ' County';
+  document.getElementById('ttStatus').innerHTML = statusLines.join('&nbsp;&nbsp;') || 'Select a type above';
+  const wrap = document.querySelector('.map-wrap');
+  const rect = wrap.getBoundingClientRect();
+  const x = e.clientX - rect.left + 8;
+  const y = e.clientY - rect.top + 8;
+  tt.style.left = Math.min(x, rect.width - 160) + 'px';
+  tt.style.top = Math.min(y, rect.height - 60) + 'px';
+  tt.style.display = 'block';
+}
+
+function hideTooltip() {
+  document.getElementById('mapTooltip').style.display = 'none';
+}
+
+// ── Type chips ──
 function toggleType(btn) {
   btn.classList.toggle('active');
+  // Refresh map colors
+  Object.keys(pathEls).forEach(updateCountyAppearance);
 }
 
 function getSelectedTypes() {
   return [...document.querySelectorAll('.type-chip.active')].map(b => b.dataset.type);
 }
 
-function getSelectedCounties() {
-  return FL_COUNTIES.filter(c => {
-    const id = 'c_' + c.name.replace(/[^a-z]/gi,'_');
-    return document.getElementById(id)?.checked;
-  });
-}
-
-// ── Scan logic ──
+// ── Scan ──
 async function startScan() {
   if (scanning) { stopFlag = true; return; }
 
   const types = getSelectedTypes();
-  const counties = getSelectedCounties();
-  if (!types.length) { alert('Select at least one search type.'); return; }
-  if (!counties.length) { alert('Select at least one county.'); return; }
+  if (!types.length) { alert('Select at least one type above the map.'); return; }
+  if (!selectedCounties.size) { alert('Click counties on the map to select them.'); return; }
 
-  // Get API key from shared_settings
+  const force = document.getElementById('forceRescan').checked;
+  const countiesToScan = [...selectedCounties]
+    .map(name => COUNTY_BY_NAME[name])
+    .filter(Boolean)
+    .filter(c => force || types.some(t => !isScanned(c.name, t)));
+
+  if (!countiesToScan.length) {
+    alert('All selected counties have already been scanned for the chosen types.\nCheck "Re-scan already scanned counties" to run again.');
+    return;
+  }
+
   if (!apiKey) {
     const { data } = await supabaseClient.from('shared_settings').select('google_key').eq('id',1).single();
     apiKey = data?.google_key;
@@ -340,46 +457,39 @@ async function startScan() {
   scanning = true;
   stopFlag = false;
   document.getElementById('scanBtn').textContent = '⏹ Stop';
-  document.getElementById('scanBtn').className = 'btn btn-sm';
   document.getElementById('progressWrap').style.display = 'flex';
 
   const radius = parseInt(document.getElementById('radiusSlider').value) * 1000;
-  const total = counties.length * types.length;
-  let done = 0;
+  const jobs = [];
+  countiesToScan.forEach(c => types.forEach(t => {
+    if (force || !isScanned(c.name, t)) jobs.push({county: c, type: t});
+  }));
 
-  for (const county of counties) {
-    for (const type of types) {
-      if (stopFlag) break;
-      const keyword = SEARCH_KEYWORDS[type];
-      setProgress(done, total, `Scanning ${county.name} — ${CAT_LABELS[type]}…`);
-      await scanCounty(county, type, keyword, radius);
-      done++;
-      setProgress(done, total, `Done ${county.name} — ${CAT_LABELS[type]}`);
-      await sleep(300);
-    }
+  for (let i = 0; i < jobs.length; i++) {
     if (stopFlag) break;
+    const {county, type} = jobs[i];
+    setProgress(i, jobs.length, `Scanning ${county.name} — ${CAT_LABELS[type]}…`);
+    await scanCounty(county, type, SEARCH_KEYWORDS[type], radius);
+    markScanned(county.name, type);
+    await sleep(300);
   }
 
   scanning = false;
   stopFlag = false;
   document.getElementById('scanBtn').textContent = 'Scan Selected Counties';
-  document.getElementById('scanBtn').className = 'btn btn-green';
-  setProgress(total, total, `Scan complete — ${results.length} companies found`);
+  setProgress(jobs.length, jobs.length, `Done — ${results.length} companies found`);
 }
 
 async function scanCounty(county, type, keyword, radius) {
   try {
-    const url = `/nearbysearch?lat=${county.lat}&lng=${county.lng}&radius=${radius}&keyword=${encodeURIComponent(keyword)}&key=${encodeURIComponent(apiKey)}`;
-    const r = await fetch(url);
+    const r = await fetch(`/nearbysearch?lat=${county.lat}&lng=${county.lng}&radius=${radius}&keyword=${encodeURIComponent(keyword)}&key=${encodeURIComponent(apiKey)}`);
     const data = await r.json();
     if (!data.results) return;
-
     for (const place of data.results) {
       if (stopFlag) return;
       if (seenIds.has(place.place_id)) continue;
       seenIds.add(place.place_id);
 
-      // Get details (phone + website)
       let phone = '', website = '', address = place.vicinity || '';
       try {
         const dr = await fetch(`/placedetails?place_id=${encodeURIComponent(place.place_id)}&key=${encodeURIComponent(apiKey)}`);
@@ -389,19 +499,14 @@ async function scanCounty(county, type, keyword, radius) {
         address = dd.result?.formatted_address || address;
       } catch(e) {}
 
-      const row = { place_id: place.place_id, name: place.name, county: county.name, category: type, phone, email: null, website, address, saved: false };
+      const row = {place_id:place.place_id, name:place.name, county:county.name, category:type, phone, email:null, website, address, saved:false};
       results.push(row);
       renderRow(row);
       updateCount();
-
-      // Scrape email async (don't block scan)
       if (website) scrapeEmailAsync(row);
-
-      await sleep(150);
+      await sleep(100);
     }
-  } catch(e) {
-    console.error('scanCounty error:', e);
-  }
+  } catch(e) { console.error('scanCounty:', e); }
 }
 
 async function scrapeEmailAsync(row) {
@@ -410,11 +515,9 @@ async function scrapeEmailAsync(row) {
     const d = await r.json();
     row.email = d.primary || null;
     const td = document.getElementById('email_' + row.place_id);
-    if (td) {
-      td.innerHTML = row.email
-        ? `<a href="mailto:${row.email}">${row.email}</a>`
-        : '<span style="color:var(--muted2);font-size:11px">—</span>';
-    }
+    if (td) td.innerHTML = row.email
+      ? `<a href="mailto:${row.email}">${row.email}</a>`
+      : '<span style="color:var(--muted2)">—</span>';
   } catch(e) {}
 }
 
@@ -422,26 +525,22 @@ async function scrapeEmailAsync(row) {
 function renderRow(row) {
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('resultsTable').style.display = '';
-
-  const tbody = document.getElementById('resultsTbody');
   const tr = document.createElement('tr');
   tr.id = 'row_' + row.place_id;
-  const catClass = {roofing:'cat-roofing',windows:'cat-windows',shutters:'cat-shutters',hvac:'cat-windows'}[row.category] || '';
+  const catClass = 'cat-' + row.category;
   tr.innerHTML = `
     <td class="name">${esc(row.name)}</td>
     <td class="county">${esc(row.county)}</td>
     <td class="cat"><span class="cat-badge ${catClass}">${CAT_LABELS[row.category]||row.category}</span></td>
-    <td class="phone">${row.phone ? `<a href="tel:${row.phone}">${esc(row.phone)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
-    <td class="email-cell" id="email_${row.place_id}"><span class="scraping">finding…</span></td>
-    <td class="web">${row.website ? `<a href="${esc(row.website)}" target="_blank" title="${esc(row.website)}">${shortUrl(row.website)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
+    <td class="phone">${row.phone?`<a href="tel:${row.phone}">${esc(row.phone)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
+    <td class="email-cell" id="email_${row.place_id}"><span style="color:var(--muted);font-size:11px;font-style:italic">finding…</span></td>
+    <td class="web">${row.website?`<a href="${esc(row.website)}" target="_blank">${shortUrl(row.website)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
     <td class="addr">${esc(row.address)}</td>
-    <td class="actions"><button class="btn btn-sm" id="savebtn_${row.place_id}" onclick="saveRow('${row.place_id}')">Save</button></td>
-  `;
-  tbody.appendChild(tr);
-
+    <td class="actions"><button class="btn btn-sm" id="savebtn_${row.place_id}" onclick="saveRow('${row.place_id}')">Save</button></td>`;
+  document.getElementById('resultsTbody').appendChild(tr);
   if (!row.website) {
-    const emailTd = document.getElementById('email_' + row.place_id);
-    if (emailTd) emailTd.innerHTML = '<span style="color:var(--muted2);font-size:11px">—</span>';
+    const td = document.getElementById('email_' + row.place_id);
+    if (td) td.innerHTML = '<span style="color:var(--muted2)">—</span>';
   }
 }
 
@@ -460,23 +559,15 @@ async function saveRow(placeId) {
   if (!row || row.saved) return;
   try {
     const { error } = await supabaseClient.from('contractor_leads').upsert({
-      place_id: row.place_id,
-      name: row.name,
-      county: row.county,
-      category: row.category,
-      phone: row.phone,
-      email: row.email,
-      website: row.website,
-      address: row.address,
-      user_id: currentUser.id,
-    }, { onConflict: 'place_id' });
+      place_id:row.place_id, name:row.name, county:row.county, category:row.category,
+      phone:row.phone, email:row.email, website:row.website, address:row.address,
+      user_id:currentUser.id,
+    }, {onConflict:'place_id'});
     if (error) throw error;
     row.saved = true;
     const btn = document.getElementById('savebtn_' + placeId);
     if (btn) btn.outerHTML = '<span class="saved-badge">✓ Saved</span>';
-  } catch(e) {
-    alert('Save failed: ' + e.message);
-  }
+  } catch(e) { alert('Save failed: ' + e.message); }
 }
 
 async function saveAll() {
@@ -486,15 +577,13 @@ async function saveAll() {
   alert(`Saved ${unsaved.length} companies.`);
 }
 
-// ── Export CSV ──
 function exportCSV() {
   if (!results.length) { alert('No results to export.'); return; }
-  const headers = ['Company','County','Type','Phone','Email','Website','Address'];
-  const rows = results.map(r => [r.name, r.county, CAT_LABELS[r.category]||r.category, r.phone, r.email||'', r.website, r.address].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(','));
-  const csv = [headers.join(','), ...rows].join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
+  const hdrs = ['Company','County','Type','Phone','Email','Website','Address'];
+  const rows = results.map(r => [r.name,r.county,CAT_LABELS[r.category]||r.category,r.phone,r.email||'',r.website,r.address].map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(','));
+  const csv = [hdrs.join(','), ...rows].join('\n');
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
   a.download = `contractor_leads_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
 }
@@ -508,6 +597,7 @@ function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 (async function init(){
   await requireAuth();
   document.getElementById('userLabel').textContent = await getUserName();
+  await loadMap();
 })();
 </script>
 </body>
