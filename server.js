@@ -201,6 +201,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve contractor database page
+  if (parsed.pathname === '/contractor-database') {
+    try {
+      const html = fs.readFileSync(path.join(__dirname, 'contractor_database.html'), 'utf8');
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.end(html);
+    } catch(e) {
+      res.writeHead(404); res.end('contractor_database.html not found.');
+    }
+    return;
+  }
+
   // Serve contractor leads page
   if (parsed.pathname === '/contractors') {
     try {

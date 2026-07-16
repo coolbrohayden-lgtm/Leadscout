@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LeadScout — Contractor Database</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0b0c0e;--surface:#101114;--surface2:#16181c;--surface3:#1d2025;
+  --border:#24272e;--border-light:#31353e;
+  --text:#e7e9ee;--muted:#8a8f98;--muted2:#5e646e;
+  --accent:#5e6ad2;--accent-hover:#7c87e0;--hot:#f47067;
+  --green:#2a6b4a;--green-light:#3dd68c;
+  --radius:10px;--radius-sm:6px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased;}
+header{display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;}
+.logo{font-size:18px;font-weight:800;letter-spacing:-.02em;}
+.logo span{background:linear-gradient(135deg,var(--accent),#8b96e8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.logo sub{font-size:10px;font-weight:600;color:var(--green-light);-webkit-text-fill-color:var(--green-light);margin-left:4px;vertical-align:middle;}
+.btn{padding:6px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);transition:all .15s;white-space:nowrap;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn-accent{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-accent:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff;}
+.btn-sm{padding:4px 8px;font-size:11px;}
+.btn-danger{color:var(--hot);border-color:transparent;background:transparent;}
+.btn-danger:hover{background:rgba(244,112,103,.1);border-color:var(--hot);color:var(--hot);}
+
+/* Filters */
+.filters{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;flex-wrap:wrap;}
+.filters input,.filters select{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:12px;font-family:inherit;padding:6px 10px;outline:none;transition:border .15s;}
+.filters input:focus,.filters select:focus{border-color:var(--accent);}
+.filters select option{background:var(--surface2);}
+#searchInput{width:180px;}
+.count-badge{font-size:12px;color:var(--muted);margin-left:auto;}
+.count-badge strong{color:var(--text);}
+
+/* Table */
+.table-wrap{flex:1;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead th{position:sticky;top:0;background:var(--surface);padding:9px 12px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+thead th:hover{color:var(--text);}
+thead th.sorted{color:var(--accent);}
+tbody tr{border-bottom:1px solid var(--border);}
+tbody tr:hover{background:var(--surface2);}
+tbody td{padding:8px 12px;vertical-align:middle;}
+td.name{font-weight:600;max-width:200px;}
+td.name a{color:var(--text);text-decoration:none;}
+td.name a:hover{color:var(--accent);}
+td.county{color:var(--muted);white-space:nowrap;}
+.cat-badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;}
+.cat-roofing{background:rgba(244,112,103,.15);color:#f47067;}
+.cat-windows{background:rgba(94,106,210,.15);color:#8b96e8;}
+.cat-shutters{background:rgba(61,214,140,.15);color:#3dd68c;}
+.cat-hvac{background:rgba(255,180,50,.15);color:#ffb432;}
+.stars{color:#f5c518;}
+.rev-count{color:var(--muted2);font-size:10px;}
+td.phone a{color:var(--text);text-decoration:none;white-space:nowrap;}
+td.phone a:hover{color:var(--accent);}
+td.email-cell a{color:var(--accent);text-decoration:none;font-size:11px;}
+td.web a{color:var(--accent);text-decoration:none;font-size:11px;max-width:130px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+td.addr{color:var(--muted);font-size:11px;max-width:160px;}
+td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
+.status-select{background:var(--surface3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;font-family:inherit;padding:3px 6px;cursor:pointer;outline:none;}
+.status-select.new{color:var(--muted);}
+.status-select.contacted{color:#ffb432;border-color:#ffb432;}
+.status-select.qualified{color:var(--green-light);border-color:var(--green-light);}
+.status-select.closed{color:var(--hot);border-color:var(--hot);}
+.notes-cell{max-width:160px;}
+.notes-input{background:transparent;border:none;border-bottom:1px solid transparent;color:var(--muted);font-size:11px;font-family:inherit;width:100%;padding:2px 0;outline:none;transition:border .15s;}
+.notes-input:focus{border-bottom-color:var(--accent);color:var(--text);}
+.notes-input::placeholder{color:var(--muted2);}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:10px;color:var(--muted);}
+.empty-state .icon{font-size:36px;opacity:.4;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Lead<span>Scout</span> <sub>CONTRACTOR DB</sub></div>
+  <a href="/contractors" style="text-decoration:none"><button class="btn btn-sm">← Back to Scan</button></a>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <span id="userLabel" style="font-size:11px;color:var(--muted)"></span>
+    <button class="btn btn-sm" onclick="signOut()">Sign Out</button>
+  </div>
+</header>
+
+<div class="filters">
+  <input id="searchInput" type="text" placeholder="Search company name…" oninput="applyFilters()"/>
+  <select id="filterCounty" onchange="applyFilters()">
+    <option value="">All Counties</option>
+  </select>
+  <select id="filterCat" onchange="applyFilters()">
+    <option value="">All Types</option>
+    <option value="roofing">Roofing</option>
+    <option value="windows">Windows</option>
+    <option value="shutters">Storm Shutters</option>
+    <option value="hvac">HVAC</option>
+  </select>
+  <select id="filterStatus" onchange="applyFilters()">
+    <option value="">All Statuses</option>
+    <option value="new">New</option>
+    <option value="contacted">Contacted</option>
+    <option value="qualified">Qualified</option>
+    <option value="closed">Closed</option>
+  </select>
+  <button class="btn btn-sm" onclick="exportCSV()">Export CSV</button>
+  <span class="count-badge" id="countBadge"></span>
+</div>
+
+<div class="table-wrap">
+  <table id="leadsTable">
+    <thead>
+      <tr>
+        <th onclick="sortBy('name')">Company</th>
+        <th onclick="sortBy('county')">County</th>
+        <th onclick="sortBy('category')">Type</th>
+        <th onclick="sortBy('rating')">Rating</th>
+        <th>Phone</th>
+        <th>Email</th>
+        <th>Website</th>
+        <th>Address</th>
+        <th onclick="sortBy('status')">Status</th>
+        <th>Notes</th>
+        <th onclick="sortBy('saved_at')">Saved</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="icon">🏠</div>
+    <p>No contractor leads saved yet. Run a scan first.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/auth.js"></script>
+<script>
+const CAT_LABELS = {roofing:'Roofing',windows:'Windows',shutters:'Storm Shutters',hvac:'HVAC'};
+
+let allLeads = [];
+let sortCol = 'saved_at';
+let sortDir = -1;
+
+async function loadLeads() {
+  const { data, error } = await supabaseClient
+    .from('contractor_leads')
+    .select('*')
+    .order('saved_at', {ascending: false});
+
+  if (error) { console.error(error); return; }
+  allLeads = data || [];
+
+  // Populate county filter
+  const counties = [...new Set(allLeads.map(r => r.county).filter(Boolean))].sort();
+  const sel = document.getElementById('filterCounty');
+  counties.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+
+  applyFilters();
+}
+
+function applyFilters() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const county = document.getElementById('filterCounty').value;
+  const cat    = document.getElementById('filterCat').value;
+  const status = document.getElementById('filterStatus').value;
+
+  let filtered = allLeads.filter(r =>
+    (!search || (r.name||'').toLowerCase().includes(search)) &&
+    (!county || r.county === county) &&
+    (!cat    || r.category === cat) &&
+    (!status || r.status === status)
+  );
+
+  // Sort
+  filtered.sort((a, b) => {
+    let av = a[sortCol] ?? '';
+    let bv = b[sortCol] ?? '';
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  });
+
+  renderTable(filtered);
+  document.getElementById('countBadge').innerHTML = `<strong>${filtered.length}</strong> of ${allLeads.length} leads`;
+  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'flex';
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = -1; }
+  document.querySelectorAll('thead th').forEach(th => th.classList.remove('sorted'));
+  applyFilters();
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    const catClass = 'cat-' + (row.category || '');
+    const ratingHtml = row.rating
+      ? `<span class="stars">★ ${row.rating}</span> <span class="rev-count">(${row.review_count||0})</span>`
+      : '<span style="color:var(--muted2)">—</span>';
+    const savedDate = row.saved_at ? new Date(row.saved_at).toLocaleDateString() : '—';
+
+    tr.innerHTML = `
+      <td class="name">${row.website
+        ? `<a href="${esc(row.website)}" target="_blank">${esc(row.name)}</a>`
+        : esc(row.name)}</td>
+      <td class="county">${esc(row.county||'')}</td>
+      <td><span class="cat-badge ${catClass}">${CAT_LABELS[row.category]||row.category||'—'}</span></td>
+      <td>${ratingHtml}</td>
+      <td class="phone">${row.phone ? `<a href="tel:${row.phone}">${esc(row.phone)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="email-cell">${row.email ? `<a href="mailto:${row.email}">${esc(row.email)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="web">${row.website ? `<a href="${esc(row.website)}" target="_blank" title="${esc(row.website)}">${shortUrl(row.website)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="addr">${esc(row.address||'')}</td>
+      <td>
+        <select class="status-select ${row.status||'new'}" onchange="updateStatus('${row.id}', this)">
+          <option value="new"     ${row.status==='new'      ?'selected':''}>New</option>
+          <option value="contacted" ${row.status==='contacted'?'selected':''}>Contacted</option>
+          <option value="qualified" ${row.status==='qualified'?'selected':''}>Qualified</option>
+          <option value="closed"  ${row.status==='closed'   ?'selected':''}>Closed</option>
+        </select>
+      </td>
+      <td class="notes-cell"><input class="notes-input" placeholder="Add note…" value="${esc(row.notes||'')}" onblur="updateNotes('${row.id}', this.value)"/></td>
+      <td class="date">${savedDate}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteLead('${row.id}', this)">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function updateStatus(id, sel) {
+  const val = sel.value;
+  sel.className = `status-select ${val}`;
+  await supabaseClient.from('contractor_leads').update({status: val}).eq('id', id);
+  const lead = allLeads.find(r => r.id === id);
+  if (lead) lead.status = val;
+}
+
+async function updateNotes(id, notes) {
+  await supabaseClient.from('contractor_leads').update({notes}).eq('id', id);
+  const lead = allLeads.find(r => r.id === id);
+  if (lead) lead.notes = notes;
+}
+
+async function deleteLead(id, btn) {
+  if (!confirm('Delete this lead?')) return;
+  const { error } = await supabaseClient.from('contractor_leads').delete().eq('id', id);
+  if (!error) {
+    allLeads = allLeads.filter(r => r.id !== id);
+    btn.closest('tr').remove();
+    document.getElementById('countBadge').innerHTML = `<strong>${allLeads.length}</strong> leads`;
+  }
+}
+
+function exportCSV() {
+  if (!allLeads.length) { alert('No leads to export.'); return; }
+  const hdrs = ['Company','County','Type','Rating','Reviews','Phone','Email','Website','Address','Status','Notes','Saved'];
+  const rows = allLeads.map(r => [
+    r.name, r.county, CAT_LABELS[r.category]||r.category, r.rating||'', r.review_count||'',
+    r.phone, r.email, r.website, r.address, r.status, r.notes,
+    r.saved_at ? new Date(r.saved_at).toLocaleDateString() : ''
+  ].map(v => `"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
+  const csv = [hdrs.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = `contractor_leads_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+function shortUrl(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return u; } }
+
+(async function init(){
+  await requireAuth();
+  document.getElementById('userLabel').textContent = await getUserName();
+  await loadLeads();
+})();
+</script>
+</body>
+</html>

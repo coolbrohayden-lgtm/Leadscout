@@ -119,6 +119,7 @@ td.rating{white-space:nowrap;}
   <div class="logo">Lead<span>Scout</span> <sub>CONTRACTORS</sub></div>
   <a href="/" style="text-decoration:none"><button class="btn btn-sm">← Restaurants</button></a>
   <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <a href="/contractor-database" target="_blank" style="text-decoration:none"><button class="btn btn-sm btn-accent">Open Database</button></a>
     <span id="userLabel" style="font-size:11px;color:var(--muted)"></span>
     <button class="btn btn-sm" onclick="signOut()">Sign Out</button>
   </div>
@@ -552,6 +553,14 @@ async function startScan() {
     apiKey = data?.google_key;
     if (!apiKey) { alert('No Google Maps API key found. Add it in the main app Settings.'); return; }
   }
+
+  // Clear previous scan results from view
+  results = [];
+  seenIds = new Set();
+  document.getElementById('resultsTbody').innerHTML = '';
+  document.getElementById('resultsTable').style.display = 'none';
+  document.getElementById('emptyState').style.display = '';
+  document.getElementById('resultCount').innerHTML = 'Scanning…';
 
   scanning = true;
   stopFlag = false;
