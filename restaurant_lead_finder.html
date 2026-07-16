@@ -1875,7 +1875,15 @@ function logNearbySearchCall(){
   const k=`ns_${_monthKey()}`;
   const n=(parseInt(localStorage.getItem(k)||'0'))+1;
   localStorage.setItem(k, n);
+  logApiCall('nearbysearch', 'restaurant');
   return n;
+}
+
+function logApiCall(endpoint, source) {
+  if (!currentUser) return;
+  supabaseClient.from('api_usage_log')
+    .insert({ endpoint, source, user_id: currentUser.id })
+    .then(() => {}).catch(() => {});
 }
 function getMonthlyNearbySearches(){
   return parseInt(localStorage.getItem(`ns_${_monthKey()}`)||'0');
@@ -1947,7 +1955,7 @@ async function placeDetails(placeId,key,fallback){
     const url=`/placedetails?place_id=${encodeURIComponent(placeId)}&key=${key}`;
     const r=await fetch(url,{signal:AbortSignal.timeout(10000)});
     const d=await r.json();
-    if(d.result) return d.result;
+    if(d.result){ logApiCall('placedetails','restaurant'); return d.result; }
   }catch(e){}
   // Use data already in the nearby search result
   return {

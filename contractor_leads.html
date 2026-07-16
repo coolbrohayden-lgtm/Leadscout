@@ -593,6 +593,7 @@ async function scanCounty(county, type, keyword, radius) {
     const r = await fetch(`/nearbysearch?lat=${county.lat}&lng=${county.lng}&radius=${radius}&keyword=${encodeURIComponent(keyword)}&key=${encodeURIComponent(apiKey)}`);
     const data = await r.json();
     if (!data.results) return;
+    logApiCall('nearbysearch', 'contractor');
     for (const place of data.results) {
       if (stopFlag) return;
       if (seenIds.has(place.place_id)) continue;
@@ -602,6 +603,7 @@ async function scanCounty(county, type, keyword, radius) {
       try {
         const dr = await fetch(`/placedetails?place_id=${encodeURIComponent(place.place_id)}&key=${encodeURIComponent(apiKey)}`);
         const dd = await dr.json();
+        logApiCall('placedetails', 'contractor');
         phone   = dd.result?.formatted_phone_number || '';
         website = dd.result?.website || '';
         address = dd.result?.formatted_address || address;
@@ -722,6 +724,13 @@ function exportCSV() {
 function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 function shortUrl(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return u; } }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+function logApiCall(endpoint, source) {
+  if (!currentUser) return;
+  supabaseClient.from('api_usage_log')
+    .insert({ endpoint, source, user_id: currentUser.id })
+    .then(() => {}).catch(() => {});
+}
 
 // ── Init ──
 (async function init(){

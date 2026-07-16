@@ -201,6 +201,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve API usage page
+  if (parsed.pathname === '/api-usage') {
+    try {
+      const html = fs.readFileSync(path.join(__dirname, 'api_usage.html'), 'utf8');
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.end(html);
+    } catch(e) {
+      res.writeHead(404); res.end('api_usage.html not found.');
+    }
+    return;
+  }
+
   // Serve personal restaurant leads page
   if (parsed.pathname === '/my-restaurant-leads') {
     try {
