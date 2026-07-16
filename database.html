@@ -283,6 +283,7 @@ tr:hover td{background:rgba(108,99,255,.04);}
     <span id="refreshBadge" style="font-size:10px;color:var(--cold);opacity:0;transition:opacity .4s"></span>
     <button class="btn" onclick="toggleActivityPanel()">Activity</button>
     <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
+    <a href="/my-restaurant-leads" target="_blank" style="text-decoration:none"><button class="btn" style="background:#1e5438;border-color:#2a6b4a;color:#3dd68c">My Claimed Leads</button></a>
     <button class="btn btn-p" onclick="exportCSV()">Export CSV</button>
     <div class="menu-wrap">
       <button class="btn" onclick="toggleHdrMenu(event)" title="More actions">⋯</button>
@@ -471,6 +472,7 @@ tr:hover td{background:rgba(108,99,255,.04);}
 <script>
 let allLeads = [];
 let blacklist = [];
+let myRestaurantClaims = new Set(); // place_ids the current user has claimed
 let activeFilters = new Set();    // empty = 'all' (no restriction)
 let activeBizFilters = new Set(); // empty = 'all' (no restriction) — types combine with OR
 let activeTags = new Set(); // empty = 'all' — tags combine with OR (matches any selected tag)
@@ -893,6 +895,7 @@ function render(){
           <div class="action-row">
             <button class="icon-btn" title="Sales script" onclick="showSalesScript('${l.place_id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></button>
             <button class="icon-btn" title="History" onclick="showLeadHistory('${l.place_id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
+            <button class="icon-btn${myRestaurantClaims.has(l.place_id)?' claimed':''}" id="rclaim_${l.place_id}" title="${myRestaurantClaims.has(l.place_id)?'Remove from My Leads':'Save to My Leads'}" onclick="toggleRestaurantClaim('${l.place_id}',this)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
             <button class="icon-btn${l.assigned_to===_myName?' claimed':''}" title="${l.assigned_to===_myName?'Release this lead':'Claim this lead'}" onclick="claimLead('${l.place_id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
             <button class="icon-btn danger" title="Delete lead" onclick="deleteLead('${l.place_id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
           </div>
@@ -1097,6 +1100,7 @@ function pipeCard(l){
     <div class="foot">
       <button class="icon-btn" title="Sales script" onclick="showSalesScript('${l.place_id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg></button>
       <button class="icon-btn" title="History" onclick="showLeadHistory('${l.place_id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
+      <button class="icon-btn${myRestaurantClaims.has(l.place_id)?' claimed':''}" title="${myRestaurantClaims.has(l.place_id)?'Remove from My Leads':'Save to My Leads'}" onclick="toggleRestaurantClaim('${l.place_id}',this)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
       <button class="icon-btn${l.assigned_to===_myName?' claimed':''}" title="${l.assigned_to===_myName?'Release':'Claim'}" onclick="claimLead('${l.place_id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
       ${notes}
     </div>
@@ -2580,6 +2584,47 @@ async function claimLead(placeId){
   render();
 }
 
+// ── Restaurant personal claims (junction table restaurant_claims) ──
+async function loadRestaurantClaims() {
+  if (!currentUser) return;
+  const { data } = await supabaseClient
+    .from('restaurant_claims')
+    .select('lead_id')
+    .eq('user_id', currentUser.id);
+  myRestaurantClaims = new Set((data || []).map(r => r.lead_id));
+}
+
+async function toggleRestaurantClaim(placeId, btn) {
+  if (!currentUser) return;
+  const isClaimed = myRestaurantClaims.has(placeId);
+  if (isClaimed) {
+    const { error } = await supabaseClient
+      .from('restaurant_claims')
+      .delete()
+      .eq('lead_id', placeId)
+      .eq('user_id', currentUser.id);
+    if (error) { showToast('❌ Could not remove claim'); return; }
+    myRestaurantClaims.delete(placeId);
+    showToast('Removed from My Leads');
+  } else {
+    const { error } = await supabaseClient
+      .from('restaurant_claims')
+      .insert({ lead_id: placeId, user_id: currentUser.id });
+    if (error) { showToast('❌ Could not save — restaurant_claims table missing?'); return; }
+    myRestaurantClaims.add(placeId);
+    showToast('✅ Saved to My Leads');
+  }
+  // Update button state in-place without full re-render
+  document.querySelectorAll(`#rclaim_${CSS.escape(placeId)}`).forEach(b => {
+    b.classList.toggle('claimed', !isClaimed);
+    b.title = !isClaimed ? 'Remove from My Leads' : 'Save to My Leads';
+  });
+  if (btn) {
+    btn.classList.toggle('claimed', !isClaimed);
+    btn.title = !isClaimed ? 'Remove from My Leads' : 'Save to My Leads';
+  }
+}
+
 // ── Per-lead activity timeline (backed by the lead_events table) ──
 let _lead_events_missing = false; // set true after first failed insert/fetch so we stop retrying noisily
 
@@ -2797,6 +2842,7 @@ function togglePendingPanel(){
   }
 
   await loadPresetTags();
+  await loadRestaurantClaims();
   await load();
   _lastRefresh = Date.now();
 })();

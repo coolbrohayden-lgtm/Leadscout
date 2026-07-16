@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LeadScout — My Restaurant Leads</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0b0c0e;--surface:#101114;--surface2:#16181c;--surface3:#1d2025;
+  --border:#24272e;--border-light:#31353e;
+  --text:#e7e9ee;--muted:#8a8f98;--muted2:#5e646e;
+  --accent:#5e6ad2;--accent-hover:#7c87e0;--hot:#f47067;--warm:#f2a33c;--cold:#3dd68c;
+  --green:#1e5438;--green-light:#3dd68c;
+  --radius:10px;--radius-sm:6px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased;}
+header{display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;}
+.logo{font-size:18px;font-weight:800;letter-spacing:-.02em;}
+.logo span{background:linear-gradient(135deg,var(--accent),#8b96e8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.logo sub{font-size:10px;font-weight:600;color:var(--green-light);-webkit-text-fill-color:var(--green-light);margin-left:4px;vertical-align:middle;}
+.btn{padding:6px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);transition:all .15s;white-space:nowrap;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn-sm{padding:4px 8px;font-size:11px;}
+.btn-danger{color:var(--hot);border-color:transparent;background:transparent;}
+.btn-danger:hover{background:rgba(244,112,103,.1);border-color:var(--hot);}
+.filters{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;flex-wrap:wrap;}
+.filters input,.filters select{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:12px;font-family:inherit;padding:6px 10px;outline:none;transition:border .15s;}
+.filters input:focus,.filters select:focus{border-color:var(--accent);}
+.filters select option{background:var(--surface2);}
+#searchInput{width:180px;}
+.count-badge{font-size:12px;color:var(--muted);}
+.count-badge strong{color:var(--text);}
+.table-wrap{flex:1;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead th{position:sticky;top:0;background:var(--surface);padding:9px 12px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+thead th:hover{color:var(--text);}
+thead th.sorted{color:var(--accent);}
+thead th.no-sort{cursor:default;}
+thead th.no-sort:hover{color:var(--muted);}
+tbody tr{border-bottom:1px solid var(--border);}
+tbody tr:hover{background:var(--surface2);}
+tbody td{padding:8px 12px;vertical-align:middle;}
+td.name{font-weight:600;max-width:180px;}
+td.name a{color:var(--text);text-decoration:none;}
+td.name a:hover{color:var(--accent);}
+.label-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;}
+.label-badge::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.label-hot{color:var(--hot);}
+.label-warm{color:var(--warm);}
+.label-cold{color:var(--cold);}
+.label-new{color:var(--muted);}
+td.phone a{color:var(--text);text-decoration:none;white-space:nowrap;}
+td.phone a:hover{color:var(--accent);}
+td.email-cell a{color:var(--accent);text-decoration:none;font-size:11px;}
+td.web a{color:var(--accent);text-decoration:none;font-size:11px;max-width:130px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+td.addr{color:var(--muted);font-size:11px;max-width:140px;}
+td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
+.status-select{background:var(--surface3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;font-family:inherit;padding:3px 6px;cursor:pointer;outline:none;}
+.status-select.new{color:var(--muted);}
+.status-select.contacted{color:#ffb432;border-color:#ffb432;}
+.status-select.interested{color:var(--warm);border-color:var(--warm);}
+.status-select.signed{color:var(--green-light);border-color:var(--green-light);}
+.notes-cell{max-width:160px;}
+.notes-input{background:transparent;border:none;border-bottom:1px solid transparent;color:var(--muted);font-size:11px;font-family:inherit;width:100%;padding:2px 0;outline:none;transition:border .15s;}
+.notes-input:focus{border-bottom-color:var(--accent);color:var(--text);}
+.notes-input::placeholder{color:var(--muted2);}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--muted);}
+.empty-state .icon{font-size:40px;opacity:.4;}
+.empty-state p{font-size:13px;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Lead<span>Scout</span> <sub>MY LEADS</sub></div>
+  <a href="/database" style="text-decoration:none"><button class="btn btn-sm">← All Restaurant Leads</button></a>
+  <a href="/" style="text-decoration:none"><button class="btn btn-sm">Scan</button></a>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <span id="userLabel" style="font-size:11px;color:var(--muted)"></span>
+    <button class="btn btn-sm" onclick="signOut()">Sign Out</button>
+  </div>
+</header>
+
+<div class="filters">
+  <input id="searchInput" type="text" placeholder="Search name…" oninput="applyFilters()"/>
+  <select id="filterBizType" onchange="applyFilters()">
+    <option value="">All Types</option>
+    <option value="restaurant">Restaurant</option>
+    <option value="cafe">Cafe</option>
+    <option value="bar">Bar</option>
+    <option value="spa">Med Spa</option>
+    <option value="gym">Gym</option>
+    <option value="hair_salon">Salon</option>
+    <option value="nail_salon">Nail Salon</option>
+  </select>
+  <select id="filterStatus" onchange="applyFilters()">
+    <option value="">All Statuses</option>
+    <option value="new">New</option>
+    <option value="contacted">Contacted</option>
+    <option value="interested">Interested</option>
+    <option value="signed">Signed</option>
+  </select>
+  <button class="btn btn-sm" onclick="exportCSV()">Export CSV</button>
+  <span class="count-badge" id="countBadge" style="margin-left:auto"></span>
+</div>
+
+<div class="table-wrap">
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="icon">🔖</div>
+    <p>You haven't saved any restaurant leads yet.</p>
+    <p style="font-size:11px;color:var(--muted2)">Go to the <a href="/database" style="color:var(--accent)">Restaurant Database</a> and hit the bookmark button on leads you want to track.</p>
+  </div>
+  <table id="leadsTable" style="display:none">
+    <thead>
+      <tr>
+        <th onclick="sortBy('name')">Business</th>
+        <th onclick="sortBy('business_type')">Type</th>
+        <th onclick="sortBy('label')">Label</th>
+        <th class="no-sort">Phone</th>
+        <th class="no-sort">Email</th>
+        <th class="no-sort">Website</th>
+        <th class="no-sort">Address</th>
+        <th onclick="sortBy('status')">Status</th>
+        <th class="no-sort">Notes</th>
+        <th onclick="sortBy('claimed_at')">Saved</th>
+        <th class="no-sort"></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/auth.js"></script>
+<script>
+const BIZ_LABELS = {
+  restaurant:'🍽️ Restaurant', spa:'💆 Med Spa', hair_salon:'✂️ Salon',
+  nail_salon:'💅 Nail Salon', gym:'🏋️ Gym', yoga_studio:'🧘 Yoga',
+  dentist:'🦷 Dentist', cafe:'☕ Cafe', bar:'🍺 Bar',
+  barber_shop:'💈 Barber', lodging:'🏨 Hotel', car_wash:'🚗 Car Wash',
+};
+
+let allClaims = [];
+let sortCol = 'claimed_at';
+let sortDir = -1;
+
+async function loadClaims() {
+  const { data, error } = await supabaseClient
+    .from('restaurant_claims')
+    .select('id, claimed_at, status, notes, leads(*)')
+    .eq('user_id', currentUser.id)
+    .order('claimed_at', { ascending: false });
+
+  if (error) { console.error(error); return; }
+
+  allClaims = (data || []).map(c => ({
+    claim_id:   c.id,
+    claimed_at: c.claimed_at,
+    status:     c.status || 'new',
+    notes:      c.notes || '',
+    ...c.leads,
+  }));
+
+  applyFilters();
+}
+
+function applyFilters() {
+  const search  = document.getElementById('searchInput').value.toLowerCase();
+  const bizType = document.getElementById('filterBizType').value;
+  const status  = document.getElementById('filterStatus').value;
+
+  let filtered = allClaims.filter(r =>
+    (!search  || (r.name||'').toLowerCase().includes(search)) &&
+    (!bizType || (r.business_type||'restaurant') === bizType) &&
+    (!status  || r.status === status)
+  );
+
+  filtered.sort((a, b) => {
+    let av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  });
+
+  renderTable(filtered);
+  const badge = document.getElementById('countBadge');
+  badge.innerHTML = `<strong>${filtered.length}</strong> of ${allClaims.length} saved leads`;
+  document.getElementById('emptyState').style.display  = allClaims.length ? 'none' : 'flex';
+  document.getElementById('leadsTable').style.display  = allClaims.length ? '' : 'none';
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = -1; }
+  applyFilters();
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    const btype = row.business_type || 'restaurant';
+    const bizLabel = BIZ_LABELS[btype] || btype.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    const lbl = (row.label || '').toUpperCase();
+    const labelClass = lbl === 'HOT' ? 'label-hot' : lbl === 'WARM' ? 'label-warm' : lbl === 'COLD' ? 'label-cold' : 'label-new';
+    const labelText  = lbl ? lbl.charAt(0) + lbl.slice(1).toLowerCase() : '—';
+    const savedDate  = row.claimed_at ? new Date(row.claimed_at).toLocaleDateString() : '—';
+
+    tr.innerHTML = `
+      <td class="name">${row.website ? `<a href="${esc(row.website)}" target="_blank">${esc(row.name||'')}</a>` : esc(row.name||'')}</td>
+      <td style="color:var(--muted);white-space:nowrap">${bizLabel}</td>
+      <td><span class="label-badge ${labelClass}">${labelText}</span></td>
+      <td class="phone">${row.phone ? `<a href="tel:${row.phone}">${esc(row.phone)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="email-cell">${row.business_email ? `<a href="mailto:${row.business_email}">${esc(row.business_email)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="web">${row.website ? `<a href="${esc(row.website)}" target="_blank">${shortUrl(row.website)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="addr">${esc(row.address||'')}</td>
+      <td>
+        <select class="status-select ${row.status}" id="status_${row.claim_id}" onchange="updateStatus('${row.claim_id}', this)">
+          <option value="new"        ${row.status==='new'       ?'selected':''}>New</option>
+          <option value="contacted"  ${row.status==='contacted' ?'selected':''}>Contacted</option>
+          <option value="interested" ${row.status==='interested'?'selected':''}>Interested</option>
+          <option value="signed"     ${row.status==='signed'    ?'selected':''}>Signed</option>
+        </select>
+      </td>
+      <td class="notes-cell"><input class="notes-input" placeholder="Add note…" value="${esc(row.notes)}" onblur="updateNotes('${row.claim_id}', this.value)"/></td>
+      <td class="date">${savedDate}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="unclaim('${row.claim_id}', this)" title="Remove from My Leads">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function updateStatus(claimId, sel) {
+  const val = sel.value;
+  sel.className = `status-select ${val}`;
+  await supabaseClient.from('restaurant_claims').update({ status: val }).eq('id', claimId);
+  const c = allClaims.find(r => r.claim_id === claimId);
+  if (c) c.status = val;
+}
+
+async function updateNotes(claimId, notes) {
+  await supabaseClient.from('restaurant_claims').update({ notes }).eq('id', claimId);
+  const c = allClaims.find(r => r.claim_id === claimId);
+  if (c) c.notes = notes;
+}
+
+async function unclaim(claimId, btn) {
+  if (!confirm('Remove this lead from your saved list?')) return;
+  const { error } = await supabaseClient.from('restaurant_claims').delete().eq('id', claimId);
+  if (!error) {
+    allClaims = allClaims.filter(r => r.claim_id !== claimId);
+    btn.closest('tr').remove();
+    applyFilters();
+  }
+}
+
+function exportCSV() {
+  if (!allClaims.length) { alert('Nothing to export.'); return; }
+  const hdrs = ['Business','Type','Label','Phone','Email','Website','Address','Status','Notes','Saved'];
+  const rows = allClaims.map(r => [
+    r.name,
+    BIZ_LABELS[r.business_type||'restaurant'] || r.business_type,
+    r.label || '',
+    r.phone || '',
+    r.business_email || '',
+    r.website || '',
+    r.address || '',
+    r.status,
+    r.notes,
+    r.claimed_at ? new Date(r.claimed_at).toLocaleDateString() : '',
+  ].map(v => `"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
+  const csv = [hdrs.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `my_restaurant_leads_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function shortUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch(e) { return u; } }
+
+(async function init() {
+  await requireAuth();
+  document.getElementById('userLabel').textContent = await getUserName();
+  await loadClaims();
+})();
+</script>
+</body>
+</html>

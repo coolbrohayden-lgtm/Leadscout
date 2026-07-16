@@ -201,6 +201,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve personal restaurant leads page
+  if (parsed.pathname === '/my-restaurant-leads') {
+    try {
+      const html = fs.readFileSync(path.join(__dirname, 'restaurant_my_leads.html'), 'utf8');
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.end(html);
+    } catch(e) {
+      res.writeHead(404); res.end('restaurant_my_leads.html not found.');
+    }
+    return;
+  }
+
   // Serve personal contractor leads page
   if (parsed.pathname === '/my-contractor-leads') {
     try {
