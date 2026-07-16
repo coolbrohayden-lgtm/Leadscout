@@ -171,11 +171,6 @@ td.rating{white-space:nowrap;}
     </div>
 
     <div class="scan-controls">
-      <div class="radius-row">
-        <span>Search radius</span>
-        <input type="range" id="radiusSlider" min="10" max="50" value="25" step="5" oninput="document.getElementById('radiusVal').textContent=this.value+'km'"/>
-        <span class="radius-val" id="radiusVal">25km</span>
-      </div>
       <button class="btn btn-green" id="scanBtn" style="width:100%;padding:10px;font-size:13px;" onclick="startScan()">Scan Selected Counties</button>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-bar-outer"><div class="progress-bar-inner" id="progressBar" style="width:0%"></div></div>
@@ -563,7 +558,7 @@ async function startScan() {
   document.getElementById('scanBtn').textContent = '⏹ Stop';
   document.getElementById('progressWrap').style.display = 'flex';
 
-  const radius = parseInt(document.getElementById('radiusSlider').value) * 1000;
+  const radius = 30000;
   const jobs = [];
   countiesToScan.forEach(c => types.forEach(t => {
     if (force || !isScanned(c.name, t)) jobs.push({county: c, type: t});
