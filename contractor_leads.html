@@ -332,8 +332,8 @@ async function startScan() {
 
   // Get API key from shared_settings
   if (!apiKey) {
-    const { data } = await supabaseClient.from('shared_settings').select('google_maps_key').eq('id',1).single();
-    apiKey = data?.google_maps_key;
+    const { data } = await supabaseClient.from('shared_settings').select('google_key').eq('id',1).single();
+    apiKey = data?.google_key;
     if (!apiKey) { alert('No Google Maps API key found. Add it in the main app Settings.'); return; }
   }
 
