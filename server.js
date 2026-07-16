@@ -201,6 +201,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve contractor leads page
+  if (parsed.pathname === '/contractors') {
+    try {
+      const html = fs.readFileSync(path.join(__dirname, 'contractor_leads.html'), 'utf8');
+      res.writeHead(200, {'Content-Type': 'text/html'});
+      res.end(html);
+    } catch(e) {
+      res.writeHead(404); res.end('contractor_leads.html not found.');
+    }
+    return;
+  }
+
   // Serve the database/CRM page
   if (parsed.pathname === '/database') {
     try {
@@ -313,16 +325,19 @@ const server = http.createServer(async (req, res) => {
       'bar': 'bar', 'night club': 'night_club',
       'hotel': 'lodging', 'car wash': 'car_wash',
     };
+    const { keyword } = parsed.query;
     const rawType = (type || 'restaurant').toLowerCase().trim();
     const resolvedType = TYPE_MAP[rawType] || rawType;
 
     try {
-      const qs = new URLSearchParams({
+      const qsParams = {
         location: `${lat},${lng}`,
         radius: String(parseFloat(radius) || 1500),
-        type: resolvedType,
         key,
-      });
+      };
+      if (keyword) { qsParams.keyword = keyword; }
+      else { qsParams.type = resolvedType; }
+      const qs = new URLSearchParams(qsParams);
       const raw = await fetchPageDirect(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?${qs}`);
       const data = JSON.parse(raw);
       res.writeHead(200, CORS);
