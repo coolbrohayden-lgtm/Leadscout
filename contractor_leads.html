@@ -98,6 +98,9 @@ td.web a{color:var(--accent);text-decoration:none;font-size:11px;max-width:140px
 td.addr{color:var(--muted);font-size:11px;max-width:160px;}
 td.actions{white-space:nowrap;}
 .saved-badge{font-size:10px;color:var(--green-light);font-weight:600;}
+td.rating{white-space:nowrap;}
+.stars{color:#f5c518;font-size:12px;}
+.rev-count{color:var(--muted2);font-size:10px;margin-left:2px;}
 .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--muted);}
 .empty-state .icon{font-size:40px;opacity:.4;}
 .empty-state p{font-size:13px;}
@@ -182,7 +185,7 @@ td.actions{white-space:nowrap;}
       <table id="resultsTable" style="display:none">
         <thead>
           <tr>
-            <th>Company</th><th>County</th><th>Type</th><th>Phone</th>
+            <th>Company</th><th>County</th><th>Type</th><th>Rating</th><th>Phone</th>
             <th>Email</th><th>Website</th><th>Address</th><th></th>
           </tr>
         </thead>
@@ -499,17 +502,18 @@ async function scanCounty(county, type, keyword, radius) {
         address = dd.result?.formatted_address || address;
       } catch(e) {}
 
-      const row = {place_id:place.place_id, name:place.name, county:county.name, category:type, phone, email:null, website, address, saved:false};
+      const row = {place_id:place.place_id, name:place.name, county:county.name, category:type, phone, email:null, website, address, rating:place.rating||null, review_count:place.user_ratings_total||null, saved:false};
       results.push(row);
       renderRow(row);
       updateCount();
-      if (website) scrapeEmailAsync(row);
+      if (website) scrapeEmailAndSave(row);
+      else autoSave(row);
       await sleep(100);
     }
   } catch(e) { console.error('scanCounty:', e); }
 }
 
-async function scrapeEmailAsync(row) {
+async function scrapeEmailAndSave(row) {
   try {
     const r = await fetch(`/scrape-email?website=${encodeURIComponent(row.website)}`);
     const d = await r.json();
@@ -518,6 +522,23 @@ async function scrapeEmailAsync(row) {
     if (td) td.innerHTML = row.email
       ? `<a href="mailto:${row.email}">${row.email}</a>`
       : '<span style="color:var(--muted2)">—</span>';
+  } catch(e) {}
+  await autoSave(row);
+}
+
+async function autoSave(row) {
+  if (row.saved) return;
+  try {
+    const { error } = await supabaseClient.from('contractor_leads').upsert({
+      place_id:row.place_id, name:row.name, county:row.county, category:row.category,
+      phone:row.phone, email:row.email, website:row.website, address:row.address,
+      rating:row.rating, review_count:row.review_count, user_id:currentUser.id,
+    }, {onConflict:'place_id'});
+    if (!error) {
+      row.saved = true;
+      const btn = document.getElementById('savebtn_' + row.place_id);
+      if (btn) btn.outerHTML = '<span class="saved-badge">✓ Saved</span>';
+    }
   } catch(e) {}
 }
 
@@ -528,15 +549,19 @@ function renderRow(row) {
   const tr = document.createElement('tr');
   tr.id = 'row_' + row.place_id;
   const catClass = 'cat-' + row.category;
+  const ratingHtml = row.rating
+    ? `<span class="stars">★ ${row.rating}</span><span class="rev-count">(${row.review_count||0})</span>`
+    : '<span style="color:var(--muted2)">—</span>';
   tr.innerHTML = `
     <td class="name">${esc(row.name)}</td>
     <td class="county">${esc(row.county)}</td>
     <td class="cat"><span class="cat-badge ${catClass}">${CAT_LABELS[row.category]||row.category}</span></td>
+    <td class="rating">${ratingHtml}</td>
     <td class="phone">${row.phone?`<a href="tel:${row.phone}">${esc(row.phone)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
-    <td class="email-cell" id="email_${row.place_id}"><span style="color:var(--muted);font-size:11px;font-style:italic">finding…</span></td>
+    <td class="email-cell" id="email_${row.place_id}"><span style="color:var(--muted);font-size:11px;font-style:italic">${row.website?'finding…':'—'}</span></td>
     <td class="web">${row.website?`<a href="${esc(row.website)}" target="_blank">${shortUrl(row.website)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
     <td class="addr">${esc(row.address)}</td>
-    <td class="actions"><button class="btn btn-sm" id="savebtn_${row.place_id}" onclick="saveRow('${row.place_id}')">Save</button></td>`;
+    <td class="actions"><span id="savebtn_${row.place_id}" style="color:var(--muted);font-size:11px">saving…</span></td>`;
   document.getElementById('resultsTbody').appendChild(tr);
   if (!row.website) {
     const td = document.getElementById('email_' + row.place_id);
@@ -561,7 +586,7 @@ async function saveRow(placeId) {
     const { error } = await supabaseClient.from('contractor_leads').upsert({
       place_id:row.place_id, name:row.name, county:row.county, category:row.category,
       phone:row.phone, email:row.email, website:row.website, address:row.address,
-      user_id:currentUser.id,
+      rating:row.rating, review_count:row.review_count, user_id:currentUser.id,
     }, {onConflict:'place_id'});
     if (error) throw error;
     row.saved = true;
