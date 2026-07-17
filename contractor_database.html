@@ -400,11 +400,48 @@ function exportCSV() {
 function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 function shortUrl(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return u; } }
 
+// ── Live team sync (always on) ──
+// Supabase realtime on contractor_leads so status moves, new scans, and deletes
+// from any teammate appear here automatically — no refresh, no toggle.
+let _liveTimer = null;
+function scheduleLiveRender() {
+  clearTimeout(_liveTimer);
+  _liveTimer = setTimeout(runLiveRender, 250);
+}
+function runLiveRender() {
+  // Don't clobber a dropdown/field the user is mid-interaction with.
+  const a = document.activeElement;
+  if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) {
+    clearTimeout(_liveTimer);
+    _liveTimer = setTimeout(runLiveRender, 1500);
+    return;
+  }
+  applyFilters();
+}
+function startLiveSync() {
+  supabaseClient.channel('contractor-leads-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'contractor_leads' }, payload => {
+      if (payload.eventType === 'DELETE') {
+        const id = payload.old && payload.old.id;
+        if (!id) return;
+        allLeads = allLeads.filter(r => r.id !== id);
+      } else {
+        const row = payload.new;
+        if (!row || !row.id) return;
+        const idx = allLeads.findIndex(r => r.id === row.id);
+        if (idx === -1) allLeads.push(row); else allLeads[idx] = { ...allLeads[idx], ...row };
+      }
+      scheduleLiveRender();
+    })
+    .subscribe();
+}
+
 (async function init(){
   await requireAuth();
   document.getElementById('userLabel').textContent = await getUserName();
   await loadLeads();
   setView(currentView);
+  startLiveSync();
 })();
 </script>
 </body>

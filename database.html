@@ -279,7 +279,7 @@ tr:hover td{background:rgba(108,99,255,.04);}
   <div class="logo">Lead<span>Scout</span></div>
   <a href="/" class="back-btn">← Back to Map</a>
   <div class="hdr-right">
-    <button class="btn" onclick="toggleAutoRefresh()" style="display:flex;align-items:center;gap:6px"><span id="refreshDot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block"></span>Live</button>
+    <span class="btn" style="display:flex;align-items:center;gap:6px;cursor:default" title="Live — changes from your team appear automatically"><span id="refreshDot" style="width:7px;height:7px;border-radius:50%;background:var(--cold);display:inline-block"></span>Live</span>
     <span id="refreshBadge" style="font-size:10px;color:var(--cold);opacity:0;transition:opacity .4s"></span>
     <button class="btn" onclick="toggleActivityPanel()">Activity</button>
     <button class="btn" onclick="togglePendingPanel()" id="pendingBtn" style="display:none;position:relative">Pending<span id="pendingCount" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--warm);color:#000;font-size:9px;font-weight:800;border-radius:8px;padding:1px 5px"></span></button>
@@ -2530,44 +2530,60 @@ function copyScript() {
 }
 
 // ── Auto-refresh ──
-let _autoRefreshTimer = null;
-let _lastRefresh = 0;
+// ── Live team sync (always on) ──
+// Supabase realtime on the shared leads table so every teammate's change —
+// status moves, notes, new/removed leads — appears here automatically.
+let _liveRenderTimer = null;
 
-async function autoRefresh() {
-  const now = Date.now();
-  const { data: newLeads } = await supabaseClient.from('leads').select('*').gt('scanned_at', _lastRefresh);
-  if (newLeads?.length) {
-    let added = 0;
-    for (const lead of newLeads) {
-      const idx = allLeads.findIndex(l => l.place_id === lead.place_id);
-      if (idx === -1) { allLeads.push(lead); added++; }
-      else allLeads[idx] = { ...allLeads[idx], ...lead };
-    }
-    _lastRefresh = now;
-    renderStats();
-    buildLocationOptions();
-    buildBizTypeChips();
-    buildTagFilterChips();
-    render();
-    if (added) {
-      const badge = document.getElementById('refreshBadge');
-      if (badge) { badge.textContent = `+${added} new`; badge.style.opacity = '1'; setTimeout(() => badge.style.opacity = '0', 2000); }
-    }
+function scheduleLiveRender() {
+  clearTimeout(_liveRenderTimer);
+  _liveRenderTimer = setTimeout(runLiveRender, 250);
+}
+function runLiveRender() {
+  // Don't wipe a field the user is mid-edit in — retry once they blur.
+  const a = document.activeElement;
+  if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) {
+    clearTimeout(_liveRenderTimer);
+    _liveRenderTimer = setTimeout(runLiveRender, 1500);
+    return;
+  }
+  renderStats();
+  buildLocationOptions();
+  buildBizTypeChips();
+  buildTagFilterChips();
+  render();
+}
+
+function applyRemoteLeadChange(payload) {
+  if (payload.eventType === 'DELETE') {
+    const id = payload.old && payload.old.place_id;
+    if (!id) return;
+    const before = allLeads.length;
+    allLeads = allLeads.filter(l => l.place_id !== id);
+    if (allLeads.length !== before) scheduleLiveRender();
+    return;
+  }
+  const lead = payload.new;
+  if (!lead || !lead.place_id) return;
+  const idx = allLeads.findIndex(l => l.place_id === lead.place_id);
+  const isNew = idx === -1;
+  if (isNew) allLeads.push(lead);
+  else allLeads[idx] = { ...allLeads[idx], ...lead };
+  // My own edit is already on screen (setStatus/saveNotes re-render locally) — skip the redraw.
+  if (!isNew && lead.updated_by && currentUser && lead.updated_by === currentUser.id) return;
+  scheduleLiveRender();
+  if (isNew) {
+    const badge = document.getElementById('refreshBadge');
+    if (badge) { badge.textContent = '+1 new'; badge.style.opacity = '1'; setTimeout(() => badge.style.opacity = '0', 2000); }
   }
 }
 
-function startAutoRefresh() {
-  _lastRefresh = Date.now();
-  _autoRefreshTimer = setInterval(autoRefresh, 15000);
-  document.getElementById('refreshDot').style.background = 'var(--cold)';
-}
-function stopAutoRefresh() {
-  clearInterval(_autoRefreshTimer);
-  _autoRefreshTimer = null;
-  document.getElementById('refreshDot').style.background = 'var(--muted)';
-}
-function toggleAutoRefresh() {
-  _autoRefreshTimer ? stopAutoRefresh() : startAutoRefresh();
+function startLiveSync() {
+  supabaseClient.channel('leads-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, applyRemoteLeadChange)
+    .subscribe();
+  const dot = document.getElementById('refreshDot');
+  if (dot) dot.style.background = 'var(--cold)';
 }
 
 // ── Lead claiming (assign a lead to yourself so the team doesn't double-work it) ──
@@ -2845,7 +2861,7 @@ function togglePendingPanel(){
   await loadPresetTags();
   await loadRestaurantClaims();
   await load();
-  _lastRefresh = Date.now();
+  startLiveSync();
 })();
 </script>
 </body>
