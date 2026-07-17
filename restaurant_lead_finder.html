@@ -824,13 +824,6 @@ select:focus { border-color:var(--accent); }
         <button class="btn" id="debugBtn" onclick="startScan(true)" disabled style="display:none;font-size:11px;border-color:#f5a623;color:#f5a623">🔬</button>
       </div>
     </div>
-    <div class="sec collapsed">
-      <h3 style="display:flex;align-items:center;justify-content:space-between" onclick="this.parentElement.classList.toggle('collapsed')">
-        <span>Map layers</span>
-        <button class="btn" id="popToggleBtn" onclick="event.stopPropagation();togglePopLayer()" style="font-size:10px;padding:3px 9px">Population off</button>
-      </h3>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.5">Colors counties by census population. Hover the map for county details. While on, clicking selects the whole county; selected cells show an estimated headcount.</div>
-    </div>
     <div class="status" id="statusBar">Select zones on the map, then scan.</div>
     <div class="prog"><div class="prog-fill" id="progFill"></div></div>
     <div class="leads-hdr">
@@ -847,7 +840,6 @@ select:focus { border-color:var(--accent); }
       <button class="fchip fc-cold" onclick="setFilter('COLD')">COLD</button>
       <button id="scanToggleBtn" class="btn" style="display:none;font-size:9px;padding:2px 8px;margin-left:auto" onclick="showCurrentScanOnly=!showCurrentScanOnly;renderLeads()">This Scan</button>
     </div>
-    <div id="scanLimitBar" style="margin:0 0 8px 0;padding:6px 8px;background:var(--surface2);border-radius:6px"></div>
     <div id="leadsWrap" class="leads">
       <div class="empty">Map loads instantly — no API key needed.<br><br>Paste your Google Maps API key above before scanning.</div>
     </div>
@@ -1033,8 +1025,6 @@ function extFetch(type, handle, name, city, url, bizType) {
   map.on('moveend', () => redrawGrid(false));
   map.on('zoomend', () => redrawGrid(true));
   redrawGrid(true);
-  // Restore population overlay if it was on last session
-  try { if (localStorage.getItem('popLayerOn') === '1') togglePopLayer(); } catch(e){}
   // Load shared keys (google + rapid) from Supabase
   const {data: sharedSettings} = await supabaseClient.from('shared_settings').select('*').eq('id',1).single();
   if(sharedSettings?.google_key) document.getElementById('apiKeyInput').value = sharedSettings.google_key;
@@ -1055,7 +1045,6 @@ function extFetch(type, handle, name, city, url, bizType) {
   if(profile?.tt_cookie) document.getElementById('ttCookieInput').value = profile.tt_cookie;
   await loadAllLeads();
   if(allLeads.length) document.getElementById('exportBtn').style.display='block';
-  getEstimatedBill().then(updateScanLimitUI);
   setStatus('Click grid squares to select zones, then hit Scan.');
 })();
 
@@ -1650,14 +1639,6 @@ async function startScan(debugMode=false){
   let debugDone=false;
   outer: for(const tile of subTiles){
     const {lat, lng, r:radius} = tile;
-
-    // ── Billing limit guard ──
-    const bill = await getEstimatedBill();
-    updateScanLimitUI(bill);
-    if(bill.total >= MONTHLY_BILL_LIMIT){
-      setStatus(`⛔ Estimated charges hit $${bill.total.toFixed(2)} (limit $${MONTHLY_BILL_LIMIT.toFixed(2)}) — scanning stopped to protect your API budget. Resets on the 1st.`);
-      break outer;
-    }
 
     setStatus(`Scanning tile ${done+1} of ${subTiles.length}... (${allLeads.length} leads so far)`);
     dbg(`chunk ${done+1}: lat=${lat.toFixed(4)} lng=${lng.toFixed(4)} r=${Math.round(radius)}`);

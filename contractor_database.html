@@ -69,6 +69,39 @@ td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
 .claim-btn.claimed:hover{background:rgba(244,112,103,.1);border-color:var(--hot);color:var(--hot);}
 .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:10px;color:var(--muted);}
 .empty-state .icon{font-size:36px;opacity:.4;}
+
+/* View toggle (Table / Pipeline) */
+.view-toggle{display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface);}
+.view-toggle button{border:none;background:transparent;color:var(--muted);font-size:11.5px;font-weight:600;font-family:inherit;padding:6px 13px;cursor:pointer;transition:all .15s;}
+.view-toggle button:hover{color:var(--text);}
+.view-toggle button.active{background:var(--accent);color:#fff;}
+
+/* Pipeline (kanban) board */
+.pipeline-wrap{display:flex;gap:14px;padding:18px 16px;overflow-x:auto;align-items:flex-start;height:100%;}
+.pipe-col{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);min-width:270px;width:270px;flex-shrink:0;display:flex;flex-direction:column;max-height:100%;}
+.pipe-col-head{padding:11px 14px;border-bottom:2px solid var(--pipe-color,var(--border));display:flex;align-items:center;gap:8px;position:sticky;top:0;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;}
+.pipe-col-head .t{font-size:12px;font-weight:700;letter-spacing:.01em;}
+.pipe-col-head .n{font-size:10px;font-weight:700;background:var(--surface3);border-radius:10px;padding:2px 8px;color:var(--muted);margin-left:auto;}
+.pipe-col-body{padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1;min-height:80px;transition:background .15s;}
+.pipe-col-body.drag-over{background:rgba(94,106,210,.1);outline:2px dashed var(--accent);outline-offset:-4px;border-radius:0 0 var(--radius) var(--radius);}
+.pipe-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;cursor:grab;transition:all .15s;}
+.pipe-card:hover{border-color:var(--border-light);transform:translateY(-1px);}
+.pipe-card.dragging{opacity:.4;cursor:grabbing;}
+.pipe-card .nm{font-size:12.5px;font-weight:700;margin-bottom:5px;letter-spacing:-.01em;}
+.pipe-card .nm a{color:var(--text);text-decoration:none;}
+.pipe-card .nm a:hover{color:var(--accent);}
+.pipe-card .meta{font-size:10.5px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.pipe-card .foot{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.pipe-card .foot a{font-size:11px;color:var(--accent);text-decoration:none;}
+.pipe-empty{font-size:10.5px;color:var(--muted2);text-align:center;padding:18px 0;}
+
+/* Status dropdown */
+.status-sel{background:var(--surface3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;font-weight:600;font-family:inherit;padding:3px 6px;cursor:pointer;outline:none;transition:all .15s;}
+.status-sel.st-new{color:var(--muted);}
+.status-sel.st-contacted{color:#ffb432;border-color:rgba(255,180,50,.4);}
+.status-sel.st-qualified{color:var(--green-light);border-color:rgba(61,214,140,.4);}
+.status-sel.st-closed{color:var(--hot);border-color:rgba(244,112,103,.4);}
+
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px;}
@@ -87,6 +120,10 @@ td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
 </header>
 
 <div class="filters">
+  <div class="view-toggle">
+    <button id="viewTableBtn" class="active" onclick="setView('table')">Table</button>
+    <button id="viewPipeBtn" onclick="setView('pipeline')">Pipeline</button>
+  </div>
   <input id="searchInput" type="text" placeholder="Search company name…" oninput="applyFilters()"/>
   <select id="filterCounty" onchange="applyFilters()"><option value="">All Counties</option></select>
   <select id="filterCat" onchange="applyFilters()">
@@ -107,7 +144,7 @@ td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
   <span class="count-badge" id="countBadge" style="margin-left:auto"></span>
 </div>
 
-<div class="table-wrap">
+<div class="table-wrap" id="tableView">
   <table id="leadsTable">
     <thead>
       <tr>
@@ -116,6 +153,7 @@ td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
         <th onclick="sortBy('county')">County</th>
         <th onclick="sortBy('category')">Type</th>
         <th onclick="sortBy('rating')">Rating</th>
+        <th onclick="sortBy('status')">Status</th>
         <th class="no-sort">Phone</th>
         <th class="no-sort">Email</th>
         <th class="no-sort">Website</th>
@@ -131,6 +169,7 @@ td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
     <p>No contractor leads saved yet. Run a scan first.</p>
   </div>
 </div>
+<div id="pipelineView" style="flex:1;overflow:hidden;display:none"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="/auth.js"></script>
@@ -182,9 +221,89 @@ function applyFilters() {
     return av<bv ? -sortDir : av>bv ? sortDir : 0;
   });
 
-  renderTable(filtered);
+  if (currentView === 'pipeline') {
+    renderPipeline(filtered);
+  } else {
+    renderTable(filtered);
+    document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'flex';
+  }
   document.getElementById('countBadge').innerHTML = `<strong>${filtered.length}</strong> of ${allLeads.length} leads`;
-  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'flex';
+}
+
+// ── View toggle (Table / Pipeline) ──
+let currentView = localStorage.getItem('contractor_view') || 'table';
+
+function setView(v) {
+  currentView = v;
+  localStorage.setItem('contractor_view', v);
+  document.getElementById('viewTableBtn').classList.toggle('active', v === 'table');
+  document.getElementById('viewPipeBtn').classList.toggle('active', v === 'pipeline');
+  document.getElementById('tableView').style.display    = v === 'table' ? '' : 'none';
+  document.getElementById('pipelineView').style.display = v === 'pipeline' ? '' : 'none';
+  applyFilters();
+}
+
+const PIPE_STAGES = [
+  { id:'new',       title:'New',       color:'#8a8f98' },
+  { id:'contacted', title:'Contacted', color:'#ffb432' },
+  { id:'qualified', title:'Qualified', color:'#3dd68c' },
+  { id:'closed',    title:'Closed',    color:'#f47067' },
+];
+
+function renderPipeline(rows) {
+  const wrap = document.getElementById('pipelineView');
+  wrap.innerHTML = `<div class="pipeline-wrap">` + PIPE_STAGES.map(st => {
+    const cards = rows.filter(r => (r.status || 'new') === st.id);
+    return `<div class="pipe-col" style="--pipe-color:${st.color}">
+      <div class="pipe-col-head"><span class="t">${st.title}</span><span class="n">${cards.length}</span></div>
+      <div class="pipe-col-body" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')">
+        ${cards.length ? cards.map(pipeCard).join('') : '<div class="pipe-empty">Drop leads here</div>'}
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function pipeCard(r) {
+  const catClass = 'cat-' + (r.category || '');
+  const rating = r.rating ? `<span class="stars">★ ${r.rating}</span>` : '';
+  const isClaimed = myClaimedIds.has(r.id);
+  return `<div class="pipe-card" draggable="true" ondragstart="pipeDragStart(event,'${r.id}')" ondragend="pipeDragEnd(event)">
+    <div class="nm">${r.website ? `<a href="${esc(r.website)}" target="_blank">${esc(r.name)}</a>` : esc(r.name)}</div>
+    <div class="meta">
+      <span class="cat-badge ${catClass}">${CAT_LABELS[r.category] || r.category || '—'}</span>
+      <span>${esc(r.county || '')}</span>
+      ${rating}
+    </div>
+    <div class="foot">
+      ${r.phone ? `<a href="tel:${r.phone}">${esc(r.phone)}</a>` : ''}
+      ${r.email ? `<a href="mailto:${r.email}">✉️</a>` : ''}
+      <button class="claim-btn ${isClaimed?'claimed':''}" style="margin-left:auto" onclick="toggleClaim('${r.id}', this)">${isClaimed?'✓ Claimed':'Claim'}</button>
+    </div>
+  </div>`;
+}
+
+let _dragId = null;
+function pipeDragStart(e, id) { _dragId = id; e.dataTransfer.effectAllowed = 'move'; e.target.classList.add('dragging'); }
+function pipeDragEnd(e) { e.target.classList.remove('dragging'); }
+function pipeDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.classList.add('drag-over'); }
+function pipeDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+async function pipeDrop(e, stage) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!_dragId) return;
+  const lead = allLeads.find(r => r.id === _dragId);
+  _dragId = null;
+  if (!lead || (lead.status || 'new') === stage) return;
+  await setStatus(lead.id, stage);
+}
+
+async function setStatus(id, status) {
+  const lead = allLeads.find(r => r.id === id);
+  if (!lead) return;
+  lead.status = status;
+  const { error } = await supabaseClient.from('contractor_leads').update({ status }).eq('id', id);
+  if (error) { console.error('setStatus', error); return; }
+  applyFilters();
 }
 
 function sortBy(col) {
@@ -203,6 +322,7 @@ function renderTable(rows) {
       : '<span style="color:var(--muted2)">—</span>';
     const savedDate = row.saved_at ? new Date(row.saved_at).toLocaleDateString() : '—';
     const isClaimed = myClaimedIds.has(row.id);
+    const status = row.status || 'new';
 
     tr.innerHTML = `
       <td><button class="claim-btn ${isClaimed?'claimed':''}" id="claimbtn_${row.id}" onclick="toggleClaim('${row.id}', this)">${isClaimed?'✓ Claimed':'Claim'}</button></td>
@@ -210,6 +330,14 @@ function renderTable(rows) {
       <td class="county">${esc(row.county||'')}</td>
       <td><span class="cat-badge ${catClass}">${CAT_LABELS[row.category]||row.category||'—'}</span></td>
       <td>${ratingHtml}</td>
+      <td>
+        <select class="status-sel st-${status}" onchange="setStatus('${row.id}', this.value)">
+          <option value="new"       ${status==='new'      ?'selected':''}>New</option>
+          <option value="contacted" ${status==='contacted'?'selected':''}>Contacted</option>
+          <option value="qualified" ${status==='qualified'?'selected':''}>Qualified</option>
+          <option value="closed"    ${status==='closed'   ?'selected':''}>Closed</option>
+        </select>
+      </td>
       <td class="phone">${row.phone?`<a href="tel:${row.phone}">${esc(row.phone)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
       <td class="email-cell">${row.email?`<a href="mailto:${row.email}">${esc(row.email)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
       <td class="web">${row.website?`<a href="${esc(row.website)}" target="_blank">${shortUrl(row.website)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
@@ -276,6 +404,7 @@ function shortUrl(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }cat
   await requireAuth();
   document.getElementById('userLabel').textContent = await getUserName();
   await loadLeads();
+  setView(currentView);
 })();
 </script>
 </body>
