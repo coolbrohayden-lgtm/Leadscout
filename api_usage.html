@@ -84,6 +84,7 @@ tbody tr:hover td{background:rgba(94,106,210,.04);}
   <a href="/database" class="btn btn-sm">← Restaurant DB</a>
   <a href="/contractor-database" class="btn btn-sm">Contractor DB</a>
   <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <a id="googleBillingLink" href="https://console.cloud.google.com/billing/0105B9-2A78E4-FCB7E5/reports?project=pragmatic-port-500213-n3" target="_blank" class="btn btn-sm" style="display:none;border-color:rgba(242,163,60,.45);color:var(--warm)" title="Opens the real Google Cloud billing report">💳 Actual Google Charges ↗</a>
     <span id="userLabel" style="font-size:11px;color:var(--muted)"></span>
     <button class="btn btn-sm" onclick="signOut()">Sign Out</button>
   </div>
@@ -277,6 +278,7 @@ function render() {
 (async function init() {
   await requireAuth();
   document.getElementById('userLabel').textContent = await getUserName();
+  if (isAdmin()) document.getElementById('googleBillingLink').style.display = '';
   await load();
 })();
 </script>
