@@ -357,6 +357,55 @@ function subscribeScanUpdates() {
   } catch (e) { /* realtime not enabled — focus refresh still covers it */ }
 }
 
+// One-time backfill: pull scans done BEFORE this shared-cache existed into the
+// shared table, so counties you and your partner already covered show green.
+// Runs at most once per browser per month; every insert is idempotent.
+async function backfillSharedCache() {
+  const flag = `ccs_backfilled_${scanMonth()}`;
+  if (localStorage.getItem(flag)) return;
+
+  const rows = [];
+  const seen = new Set();
+  const add = (county, category) => {
+    if (!county || !category) return;
+    const k = `${county}|${category}`;
+    if (seen.has(k) || scannedSet.has(k)) return;
+    seen.add(k);
+    rows.push({ county, category, scan_month: scanMonth(), user_id: currentUser.id, scanned_at: new Date().toISOString() });
+  };
+
+  // 1) Derive from leads already saved this month — covers the whole team's
+  //    scans, since saved leads are shared, not per-browser.
+  try {
+    const { data } = await supabaseClient.from('contractor_leads').select('county, category, saved_at');
+    (data || []).forEach(l => {
+      if (!l.saved_at) return;
+      const d = new Date(l.saved_at);
+      if (`${d.getFullYear()}_${d.getMonth()}` === scanMonth()) add(l.county, l.category);
+    });
+  } catch (e) {}
+
+  // 2) Migrate this browser's own old localStorage markings (catches counties
+  //    that were scanned but returned zero results). Key: cl_{county}_{type}_{year}_{month}
+  Object.keys(localStorage).filter(k => k.startsWith('cl_')).forEach(k => {
+    const parts = k.slice(3).split('_');
+    if (parts.length < 4) return;
+    const month = parts.pop(), year = parts.pop(), type = parts.pop();
+    const county = parts.join('_');
+    if (`${year}_${month}` === scanMonth()) add(county, type);
+  });
+
+  if (rows.length) {
+    const { error } = await supabaseClient
+      .from('contractor_county_scans')
+      .upsert(rows, { onConflict: 'county,category,scan_month', ignoreDuplicates: true });
+    if (error) { console.warn('backfill failed:', error.message); return; }
+    rows.forEach(r => scannedSet.add(`${r.county}|${r.category}`));
+    repaintAllCounties();
+  }
+  localStorage.setItem(flag, '1');
+}
+
 // ── Map ──
 async function loadMap() {
   try {
@@ -789,6 +838,7 @@ function logApiCall(endpoint, source) {
   await loadScannedCache();
   await loadMap();
   repaintAllCounties();
+  await backfillSharedCache();
   subscribeScanUpdates();
   // Fallback for teammates with an already-open tab: refresh coverage when they return to it.
   document.addEventListener('visibilitychange', () => {
