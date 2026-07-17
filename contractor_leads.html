@@ -163,7 +163,7 @@ td.rating{white-space:nowrap;}
       <div class="map-btns">
         <button class="btn btn-sm" onclick="selectAll()">Select All</button>
         <button class="btn btn-sm" onclick="clearSelection()">Clear</button>
-        <button class="btn btn-sm" onclick="clearScanCache()" style="margin-left:auto;color:var(--muted)">Reset cache</button>
+        <button class="btn btn-sm" id="resetCacheBtn" onclick="clearScanCache()" style="margin-left:auto;color:var(--muted);display:none">Reset cache (team)</button>
       </div>
       <div class="force-row">
         <input type="checkbox" id="forceRescan"/>
@@ -286,26 +286,75 @@ let stopFlag = false;
 let apiKey = null;
 let pathEls = {}; // countyName → SVG path element
 
-// ── Scan cache (localStorage, resets monthly) ──
-function scanKey(county, type) {
+// ── Scan cache (shared via Supabase, resets monthly) ──
+// Every scanned county+type is recorded in contractor_county_scans so the
+// whole team sees which areas are already covered — not just the local browser.
+let scannedSet = new Set(); // "county|type" for the current month
+
+function scanMonth() {
   const d = new Date();
-  return `cl_${county}_${type}_${d.getFullYear()}_${d.getMonth()}`;
+  return `${d.getFullYear()}_${d.getMonth()}`;
 }
-function markScanned(county, type) {
-  localStorage.setItem(scanKey(county, type), '1');
-  updateCountyAppearance(county);
+
+async function loadScannedCache() {
+  const { data, error } = await supabaseClient
+    .from('contractor_county_scans')
+    .select('county, category')
+    .eq('scan_month', scanMonth());
+  if (error) { console.warn('Shared scan cache unavailable:', error.message); return; }
+  scannedSet = new Set((data || []).map(r => `${r.county}|${r.category}`));
 }
+
 function isScanned(county, type) {
-  return !!localStorage.getItem(scanKey(county, type));
+  return scannedSet.has(`${county}|${type}`);
 }
+
+async function markScanned(county, type) {
+  scannedSet.add(`${county}|${type}`);   // paint instantly for me
+  updateCountyAppearance(county);
+  const { error } = await supabaseClient
+    .from('contractor_county_scans')
+    .upsert(
+      { county, category: type, scan_month: scanMonth(), user_id: currentUser.id, scanned_at: new Date().toISOString() },
+      { onConflict: 'county,category,scan_month', ignoreDuplicates: true }
+    );
+  if (error) console.warn('markScanned failed:', error.message);
+}
+
 function allTypesScanned(county) {
   return getSelectedTypes().every(t => isScanned(county, t));
 }
-function clearScanCache() {
-  const keys = Object.keys(localStorage).filter(k => k.startsWith('cl_'));
-  keys.forEach(k => localStorage.removeItem(k));
+
+function repaintAllCounties() {
   Object.keys(pathEls).forEach(name => updateCountyAppearance(name));
-  alert('Scan cache cleared — all counties will be re-scanned.');
+}
+
+async function clearScanCache() {
+  if (!confirm('Reset the scanned-county markings for the WHOLE team this month?\nEveryone will see these counties as un-scanned again.')) return;
+  const { error } = await supabaseClient
+    .from('contractor_county_scans')
+    .delete()
+    .eq('scan_month', scanMonth());
+  if (error) { alert('Could not clear shared cache: ' + error.message); return; }
+  scannedSet.clear();
+  repaintAllCounties();
+  alert('Scan cache cleared for the whole team.');
+}
+
+// Live updates: when a teammate finishes a county, turn it green here too.
+function subscribeScanUpdates() {
+  try {
+    supabaseClient.channel('county-scans')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contractor_county_scans' }, payload => {
+        if (payload.eventType === 'DELETE') {
+          loadScannedCache().then(repaintAllCounties);
+        } else if (payload.new && payload.new.scan_month === scanMonth()) {
+          scannedSet.add(`${payload.new.county}|${payload.new.category}`);
+          updateCountyAppearance(payload.new.county);
+        }
+      })
+      .subscribe();
+  } catch (e) { /* realtime not enabled — focus refresh still covers it */ }
 }
 
 // ── Map ──
@@ -578,7 +627,7 @@ async function startScan() {
     const {county, type} = jobs[i];
     setProgress(i, jobs.length, `Scanning ${county.name} — ${CAT_LABELS[type]}…`);
     await scanCounty(county, type, SEARCH_KEYWORDS[type], radius);
-    markScanned(county.name, type);
+    await markScanned(county.name, type);
     await sleep(300);
   }
 
@@ -736,7 +785,15 @@ function logApiCall(endpoint, source) {
 (async function init(){
   await requireAuth();
   document.getElementById('userLabel').textContent = await getUserName();
+  if (isAdmin()) document.getElementById('resetCacheBtn').style.display = '';
+  await loadScannedCache();
   await loadMap();
+  repaintAllCounties();
+  subscribeScanUpdates();
+  // Fallback for teammates with an already-open tab: refresh coverage when they return to it.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) loadScannedCache().then(repaintAllCounties);
+  });
 })();
 </script>
 </body>
