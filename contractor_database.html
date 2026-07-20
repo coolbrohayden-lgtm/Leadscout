@@ -282,7 +282,7 @@ let collapsedStages = new Set((() => { try { return JSON.parse(localStorage.getI
 function toggleStageCollapse(id) {
   if (collapsedStages.has(id)) collapsedStages.delete(id); else collapsedStages.add(id);
   localStorage.setItem('contractor_stage_collapsed', JSON.stringify([...collapsedStages]));
-  applyFilters();
+  animatePipeline(applyFilters);
 }
 function moveStage(id, dir) {
   const order = stageOrderIds();
@@ -290,7 +290,28 @@ function moveStage(id, dir) {
   if (i < 0 || j < 0 || j >= order.length) return;
   [order[i], order[j]] = [order[j], order[i]];
   localStorage.setItem('contractor_stage_order', JSON.stringify(order));
-  applyFilters();
+  animatePipeline(applyFilters);
+}
+
+// FLIP: capture column positions, re-render, then glide each from old → new.
+function animatePipeline(mutate) {
+  const wrap = document.querySelector('.pipeline-wrap');
+  const first = new Map();
+  if (wrap) wrap.querySelectorAll('[data-stage-id]').forEach(el => first.set(el.dataset.stageId, el.getBoundingClientRect()));
+  mutate();
+  const wrap2 = document.querySelector('.pipeline-wrap');
+  if (!wrap2 || !first.size) return;
+  wrap2.querySelectorAll('[data-stage-id]').forEach(el => {
+    const prev = first.get(el.dataset.stageId);
+    const now = el.getBoundingClientRect();
+    if (!prev) { el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease' }); return; }
+    const dx = prev.left - now.left, dy = prev.top - now.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    el.animate(
+      [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
+      { duration: 240, easing: 'cubic-bezier(.2,.75,.3,1)' }
+    );
+  });
 }
 
 function renderPipeline(rows) {
@@ -299,7 +320,7 @@ function renderPipeline(rows) {
   wrap.innerHTML = `<div class="pipeline-wrap">` + stages.map((st, i) => {
     const cards = rows.filter(r => (r.status || 'new') === st.id);
     if (collapsedStages.has(st.id)) {
-      return `<div class="pipe-col collapsed" style="--pipe-color:${st.color}" onclick="toggleStageCollapse('${st.id}')" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')" title="Expand ${st.title}">
+      return `<div class="pipe-col collapsed" data-stage-id="${st.id}" style="--pipe-color:${st.color}" onclick="toggleStageCollapse('${st.id}')" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')" title="Expand ${st.title}">
         <div class="pipe-col-collapsed-inner">
           <span class="cc-count">${cards.length}</span>
           <span class="cc-title">${st.title}</span>
@@ -308,7 +329,7 @@ function renderPipeline(rows) {
       </div>`;
     }
     const canL = i > 0, canR = i < stages.length - 1;
-    return `<div class="pipe-col" style="--pipe-color:${st.color}">
+    return `<div class="pipe-col" data-stage-id="${st.id}" style="--pipe-color:${st.color}">
       <div class="pipe-col-head">
         <span class="t">${st.title}</span>
         <span class="n">${cards.length}</span>
