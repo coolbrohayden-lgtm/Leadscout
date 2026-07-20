@@ -98,6 +98,19 @@ header{background:rgba(17,20,25,.85);backdrop-filter:blur(12px);border-bottom:1p
 .pipe-card .socials{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-bottom:6px;}
 .pipe-card .foot{display:flex;gap:5px;align-items:center;}
 .pipe-empty{font-size:10.5px;color:var(--muted2);text-align:center;padding:18px 0;}
+/* Stage column controls (move / minimize) */
+.col-actions{display:flex;gap:1px;align-items:center;}
+.col-btn{border:none;background:transparent;color:var(--muted2);font-size:14px;font-weight:700;cursor:pointer;padding:0 3px;border-radius:3px;line-height:1;transition:color .15s;font-family:inherit;}
+.col-btn:hover:not(:disabled){color:var(--text);}
+.col-btn:disabled{opacity:.25;cursor:default;}
+/* Collapsed stage column (GHL-style vertical bar) */
+.pipe-col.collapsed{min-width:46px;width:46px;cursor:pointer;align-self:stretch;}
+.pipe-col.collapsed:hover{border-color:var(--accent);}
+.pipe-col.collapsed.drag-over{border-color:var(--accent);background:var(--accent-soft);}
+.pipe-col-collapsed-inner{display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px 0;height:100%;border-top:2px solid var(--pipe-color,var(--border));border-radius:var(--radius);}
+.cc-count{font-size:11px;font-weight:800;background:var(--surface3);border-radius:10px;padding:2px 7px;color:var(--muted);}
+.cc-title{writing-mode:vertical-rl;transform:rotate(180deg);font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;flex:1;}
+.cc-icon{font-size:13px;color:var(--muted2);}
 .add-stage-btn{min-width:190px;flex-shrink:0;border:2px dashed var(--border);border-radius:var(--radius);background:transparent;color:var(--muted);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;padding:22px;height:fit-content;transition:all .15s;}
 .add-stage-btn:hover{border-color:var(--accent);color:var(--accent-hover);background:var(--accent-soft);}
 .stage-del{margin-left:4px;border:none;background:transparent;color:var(--muted2);font-size:11px;cursor:pointer;padding:0 3px;border-radius:3px;transition:color .15s;}
@@ -951,15 +964,56 @@ function getAllStages(){ return [...PIPE_STAGES, ...customStages]; }
 
 const ACTION_ICONS = { email:'📧', igdm:'💬', call:'📱' };
 
+// ── Per-person board layout: column order + which columns are minimized ──
+function getOrderedStages(){
+  const all = getAllStages();
+  let saved=[]; try{ saved=JSON.parse(localStorage.getItem('leadscout_stage_order')||'[]'); }catch(e){}
+  const byId = Object.fromEntries(all.map(s=>[s.id,s]));
+  const ordered=[];
+  saved.forEach(id=>{ if(byId[id]){ ordered.push(byId[id]); delete byId[id]; } });
+  all.forEach(s=>{ if(byId[s.id]) ordered.push(s); });
+  return ordered;
+}
+let collapsedStages = new Set((()=>{ try{ return JSON.parse(localStorage.getItem('leadscout_stage_collapsed')||'[]'); }catch(e){ return []; } })());
+function toggleStageCollapse(id){
+  if(collapsedStages.has(id)) collapsedStages.delete(id); else collapsedStages.add(id);
+  localStorage.setItem('leadscout_stage_collapsed', JSON.stringify([...collapsedStages]));
+  render();
+}
+function moveStage(id, dir){
+  const order = getOrderedStages().map(s=>s.id);
+  const i = order.indexOf(id), j = i + dir;
+  if(i<0 || j<0 || j>=order.length) return;
+  [order[i],order[j]]=[order[j],order[i]];
+  localStorage.setItem('leadscout_stage_order', JSON.stringify(order));
+  render();
+}
+
 function renderPipeline(leads, c){
-  c.innerHTML = `<div class="pipeline-wrap">` + getAllStages().map(st=>{
+  const stages = getOrderedStages();
+  c.innerHTML = `<div class="pipeline-wrap">` + stages.map((st,i)=>{
     const cards = leads.filter(l=>(l.status||'new')===st.id);
-    const stageValue = cards.reduce((sum,l)=>sum+(Number(l.deal_value)||0),0);
     const title = st.builtin ? st.title : `${st.icon||'📁'} ${st.title}`;
+    if(collapsedStages.has(st.id)){
+      return `<div class="pipe-col collapsed" style="--pipe-color:${st.color}" onclick="toggleStageCollapse('${st.id}')" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')" title="Expand ${st.title}">
+        <div class="pipe-col-collapsed-inner">
+          <span class="cc-count">${cards.length}</span>
+          <span class="cc-title">${title}</span>
+          <span class="cc-icon">▸</span>
+        </div>
+      </div>`;
+    }
+    const stageValue = cards.reduce((sum,l)=>sum+(Number(l.deal_value)||0),0);
     const zap = st.action && st.action!=='none' ? `<span title="Automation: ${ACTION_ICONS[st.action]||''} runs when a lead is dropped here" style="font-size:11px">⚡</span>` : '';
     const del = st.builtin ? '' : `<button class="stage-del" onclick="deleteStage('${st.id}')" title="Delete this stage">✕</button>`;
+    const canL = i>0, canR = i<stages.length-1;
     return `<div class="pipe-col" style="--pipe-color:${st.color}">
-      <div class="pipe-col-head"><span class="t">${title}</span>${zap}<span class="n">${cards.length}</span>${del}</div>
+      <div class="pipe-col-head"><span class="t">${title}</span>${zap}<span class="n">${cards.length}</span>
+        <span class="col-actions">
+          <button class="col-btn" ${canL?'':'disabled'} onclick="moveStage('${st.id}',-1)" title="Move left">‹</button>
+          <button class="col-btn" ${canR?'':'disabled'} onclick="moveStage('${st.id}',1)" title="Move right">›</button>
+          <button class="col-btn" onclick="toggleStageCollapse('${st.id}')" title="Minimize">–</button>
+        </span>${del}</div>
       ${stageValue?`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--cold);border-bottom:1px solid var(--border)">${fmtMoney(stageValue)}</div>`:''}
       <div class="pipe-col-body" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')">
         ${cards.length ? cards.map(pipeCard).join('') : '<div class="pipe-empty">Drop leads here</div>'}
