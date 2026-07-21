@@ -290,6 +290,13 @@ let pathEls = {}; // countyName → SVG path element
 // Every scanned county+type is recorded in contractor_county_scans so the
 // whole team sees which areas are already covered — not just the local browser.
 let scannedSet = new Set(); // "county|type" for the current month
+let blacklistedIds = new Set(); // place_ids marked as "denied by contractor" — never re-added
+
+async function loadBlacklist() {
+  const { data, error } = await supabaseClient.from('contractor_blacklist').select('place_id');
+  if (error) { console.warn('Contractor blacklist unavailable:', error.message); return; }
+  blacklistedIds = new Set((data || []).map(r => r.place_id));
+}
 
 function scanMonth() {
   const d = new Date();
@@ -652,6 +659,9 @@ async function startScan() {
     if (!apiKey) { alert('No Google Maps API key found. Add it in the main app Settings.'); return; }
   }
 
+  // Refresh the blacklist so denials made since page load are respected
+  await loadBlacklist();
+
   // Clear previous scan results from view
   results = [];
   seenIds = new Set();
@@ -695,6 +705,7 @@ async function scanCounty(county, type, keyword, radius) {
     for (const place of data.results) {
       if (stopFlag) return;
       if (seenIds.has(place.place_id)) continue;
+      if (blacklistedIds.has(place.place_id)) continue; // denied by a contractor — skip
       seenIds.add(place.place_id);
 
       let phone = '', website = '', address = place.vicinity || '';
@@ -836,6 +847,7 @@ function logApiCall(endpoint, source) {
   document.getElementById('userLabel').textContent = await getUserName();
   if (isAdmin()) document.getElementById('resetCacheBtn').style.display = '';
   await loadScannedCache();
+  await loadBlacklist();
   await loadMap();
   repaintAllCounties();
   await backfillSharedCache();

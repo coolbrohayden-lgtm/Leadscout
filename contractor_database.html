@@ -361,6 +361,7 @@ function pipeCard(r) {
       ${r.phone ? `<a href="tel:${r.phone}">${esc(r.phone)}</a>` : ''}
       ${r.email ? `<a href="mailto:${r.email}">✉️</a>` : ''}
       <button class="claim-btn ${isClaimed?'claimed':''}" style="margin-left:auto" onclick="toggleClaim('${r.id}', this)">${isClaimed?'✓ Claimed':'Claim'}</button>
+      <button class="claim-btn" onclick="blacklistLead('${r.id}', this)" title="Denied by contractor — blacklist" style="color:#f2a33c">⛔</button>
     </div>
   </div>`;
 }
@@ -426,7 +427,7 @@ function renderTable(rows) {
       <td class="web">${row.website?`<a href="${esc(row.website)}" target="_blank">${shortUrl(row.website)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
       <td class="addr">${esc(row.address||'')}</td>
       <td class="date">${savedDate}</td>
-      <td><button class="btn btn-sm btn-danger" onclick="deleteLead('${row.id}', this)">✕</button></td>`;
+      <td style="white-space:nowrap"><button class="btn btn-sm" onclick="blacklistLead('${row.id}', this)" title="Denied by contractor — blacklist so it never returns in scans" style="color:#f2a33c;border-color:transparent">⛔</button><button class="btn btn-sm btn-danger" onclick="deleteLead('${row.id}', this)" title="Delete (can reappear on re-scan)">✕</button></td>`;
     tbody.appendChild(tr);
   });
 }
@@ -463,6 +464,21 @@ async function deleteLead(id, btn) {
     btn.closest('tr').remove();
     document.getElementById('countBadge').innerHTML = `<strong>${allLeads.length}</strong> leads`;
   }
+}
+
+// Blacklist = removed from the shared DB AND never re-added by future scans.
+// Use when a contractor declines on a call.
+async function blacklistLead(id, btn) {
+  const lead = allLeads.find(r => r.id === id);
+  if (!lead) return;
+  if (!confirm(`Blacklist "${lead.name}"?\nIt will be removed for everyone and won't come back in future scans.`)) return;
+  const { error: blErr } = await supabaseClient.from('contractor_blacklist')
+    .upsert({ place_id: lead.place_id, name: lead.name, blacklisted_by: currentUser.id },
+            { onConflict: 'place_id', ignoreDuplicates: true });
+  if (blErr) { alert('Could not blacklist — is the contractor_blacklist table added in Supabase?'); return; }
+  await supabaseClient.from('contractor_leads').delete().eq('id', id);
+  allLeads = allLeads.filter(r => r.id !== id);
+  applyFilters();
 }
 
 function exportCSV() {
