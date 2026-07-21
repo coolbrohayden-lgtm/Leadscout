@@ -33,7 +33,7 @@ header{display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;backg
 .layout{display:flex;flex:1;overflow:hidden;}
 
 /* Left panel */
-.panel{width:360px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.panel{flex:2;min-width:420px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
 .panel-top{padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .panel-top h3{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
 .type-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
@@ -68,8 +68,8 @@ header{display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;backg
 .panel.storm-mode .counties-only{display:none !important;}
 
 /* Storm map overlay */
-#stormMap{background:#0b0c0e;}
-.leaflet-container{background:#0b0c0e;font-family:inherit;}
+#stormMap{background:#a9d3e0;}
+.leaflet-container{background:#a9d3e0;font-family:inherit;}
 .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface2);color:var(--text);border:1px solid var(--border-light);}
 .leaflet-popup-content{font-size:12px;margin:9px 12px;}
 #stormBanner{position:absolute;top:8px;left:8px;right:8px;z-index:500;background:rgba(16,17,20,.92);border:1px solid var(--border-light);border-radius:6px;padding:7px 11px;font-size:11.5px;font-weight:600;color:var(--text);pointer-events:none;}
@@ -99,7 +99,7 @@ header{display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;backg
 .progress-text{font-size:11px;color:var(--muted);}
 
 /* Main results */
-.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.main{flex:1;min-width:300px;display:flex;flex-direction:column;overflow:hidden;}
 .toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .result-count{font-size:12px;color:var(--muted);flex:1;}
 .result-count strong{color:var(--text);}
@@ -691,7 +691,8 @@ async function initStormMap(){
     stormInited = true;
     stormMap = L.map('stormMap', { zoomControl: false, attributionControl: false }).setView([28.5, -89], 5);
     L.control.zoom({ position: 'bottomright' }).addTo(stormMap);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 12, subdomains: 'abcd' }).addTo(stormMap);
+    // Voyager basemap: blue water, clear land + coastlines (easy to read at a glance)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 18, subdomains: 'abcd' }).addTo(stormMap);
     await refreshStormData();
   } else {
     setTimeout(() => stormMap.invalidateSize(), 60);
@@ -708,7 +709,7 @@ async function refreshStormData(){
     const warnLayer = L.geoJSON(stormWarnings, {
       style: f => {
         const watch = /Watch/i.test(f.properties.event || '');
-        return { color: watch ? '#f2a33c' : '#f47067', weight: 1, fillColor: watch ? '#f2a33c' : '#f47067', fillOpacity: 0.22 };
+        return { color: watch ? '#e08600' : '#d92d20', weight: 2, fillColor: watch ? '#f2a33c' : '#f47067', fillOpacity: 0.38 };
       },
       onEachFeature: (f, layer) => layer.bindPopup(`<b>${f.properties.event||'Alert'}</b><br>${(f.properties.area||'').slice(0,140)}`)
     }).addTo(stormMap);
