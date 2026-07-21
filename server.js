@@ -114,6 +114,9 @@ function httpsPost(apiUrl, body, apiKey) {
   });
 }
 
+// Live storm data cache (NOAA) — refreshed at most every 10 minutes
+let _stormCache = { data: null, at: 0 };
+
 // Read shared_settings row from Supabase (cached 60s) — used by /send-email
 let _settingsCache = { data: null, at: 0 };
 function getSharedSettings() {
@@ -345,6 +348,53 @@ const server = http.createServer(async (req, res) => {
       console.error('billing-live error:', e.message);
       res.writeHead(200, CORS);
       res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // Live storm data (NHC storm positions + NWS warning/watch polygons) — public NOAA data, no auth
+  if (parsed.pathname === '/storm-data') {
+    try {
+      if (_stormCache.data && Date.now() - _stormCache.at < 10 * 60 * 1000) {
+        res.writeHead(200, CORS);
+        res.end(JSON.stringify(_stormCache.data));
+        return;
+      }
+      // 1) NHC active storm positions
+      let storms = [];
+      try {
+        const nhc = JSON.parse(await fetchPageDirect('https://www.nhc.noaa.gov/CurrentStorms.json'));
+        storms = (nhc.activeStorms || [])
+          .map(s => ({
+            id: s.id, name: s.name, classification: s.classification, intensity: s.intensity,
+            pressure: s.pressure, lat: s.latitudeNumeric, lng: s.longitudeNumeric,
+            movementDir: s.movementDir, movementSpeed: s.movementSpeed, lastUpdate: s.lastUpdate,
+          }))
+          .filter(s => typeof s.lat === 'number' && typeof s.lng === 'number');
+      } catch (e) { console.error('storm-data NHC:', e.message); }
+      // 2) NWS active tropical warning/watch polygons (free, no key)
+      let warnings = { type: 'FeatureCollection', features: [] };
+      try {
+        const events = 'Tropical Storm Warning,Hurricane Warning,Tropical Storm Watch,Hurricane Watch,Storm Surge Warning,Storm Surge Watch';
+        const nws = JSON.parse(await fetchPageDirect(
+          'https://api.weather.gov/alerts/active?event=' + encodeURIComponent(events),
+          0,
+          { 'User-Agent': 'LeadScout/1.0 (coolbrohayden@gmail.com)', 'Accept': 'application/geo+json' }
+        ));
+        const feats = (nws.features || []).filter(f => f.geometry).map(f => ({
+          type: 'Feature',
+          geometry: f.geometry,
+          properties: { event: f.properties.event, area: f.properties.areaDesc, severity: f.properties.severity },
+        }));
+        warnings = { type: 'FeatureCollection', features: feats };
+      } catch (e) { console.error('storm-data NWS:', e.message); }
+      const out = { storms, warnings, fetchedAt: Date.now() };
+      _stormCache = { data: out, at: Date.now() };
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify(out));
+    } catch (e) {
+      res.writeHead(200, CORS);
+      res.end(JSON.stringify({ error: e.message, storms: [], warnings: { type: 'FeatureCollection', features: [] } }));
     }
     return;
   }

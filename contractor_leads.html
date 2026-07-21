@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>LeadScout — Contractor Leads</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -57,6 +59,25 @@ header{display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;backg
 .zoom-btn{width:26px;height:26px;background:var(--surface2);border:1px solid var(--border-light);border-radius:5px;color:var(--text);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
 .zoom-btn:hover{border-color:var(--accent);color:var(--accent);}
 .zoom-hint{position:absolute;bottom:8px;left:8px;font-size:9px;color:var(--muted2);}
+
+/* Map mode toggle (Counties / Storm) */
+.map-mode{display:flex;gap:5px;padding:8px 12px 0;}
+.mode-btn{flex:1;padding:7px 10px;border-radius:6px;font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .15s;}
+.mode-btn:hover{border-color:var(--border-light);color:var(--text);}
+.mode-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.panel.storm-mode .counties-only{display:none !important;}
+
+/* Storm map overlay */
+#stormMap{background:#0b0c0e;}
+.leaflet-container{background:#0b0c0e;font-family:inherit;}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface2);color:var(--text);border:1px solid var(--border-light);}
+.leaflet-popup-content{font-size:12px;margin:9px 12px;}
+#stormBanner{position:absolute;top:8px;left:8px;right:8px;z-index:500;background:rgba(16,17,20,.92);border:1px solid var(--border-light);border-radius:6px;padding:7px 11px;font-size:11.5px;font-weight:600;color:var(--text);pointer-events:none;}
+#stormLegend{position:absolute;bottom:8px;left:8px;z-index:500;background:rgba(16,17,20,.92);border:1px solid var(--border-light);border-radius:6px;padding:6px 9px;display:flex;flex-direction:column;gap:4px;font-size:10px;color:var(--muted);}
+#stormLegend span{display:flex;align-items:center;gap:6px;}
+#stormLegend i{width:12px;height:8px;border-radius:2px;display:inline-block;}
+#stormLegend i.dot{width:9px;height:9px;border-radius:50%;}
+#scanWarnedBtn{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:500;width:auto;padding:9px 18px;font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.5);}
 
 /* Map legend + controls */
 .map-footer{padding:8px 12px;border-top:1px solid var(--border);flex-shrink:0;}
@@ -137,6 +158,11 @@ td.rating{white-space:nowrap;}
       </div>
     </div>
 
+    <div class="map-mode">
+      <button id="mapModeCounties" class="mode-btn active" onclick="setMapMode('counties')">🗺️ Florida Counties</button>
+      <button id="mapModeStorm" class="mode-btn" onclick="setMapMode('storm')">🌀 Storm Map</button>
+    </div>
+
     <div class="map-wrap" id="mapWrap">
       <svg id="flMap" viewBox="0 0 300 380" preserveAspectRatio="xMidYMid meet">
         <g id="mapG"></g>
@@ -146,21 +172,33 @@ td.rating{white-space:nowrap;}
         <div class="tt-status" id="ttStatus"></div>
       </div>
       <div id="mapLoading">Loading map…</div>
-      <div class="zoom-btns">
+      <div class="zoom-btns counties-only">
         <button class="zoom-btn" onclick="zoomBy(1.3)" title="Zoom in">+</button>
         <button class="zoom-btn" onclick="zoomBy(0.77)" title="Zoom out">−</button>
         <button class="zoom-btn" onclick="resetZoom()" title="Reset" style="font-size:10px">⌂</button>
       </div>
-      <div class="zoom-hint">Scroll to zoom · Drag to pan</div>
+      <div class="zoom-hint counties-only">Scroll to zoom · Drag to pan</div>
+
+      <!-- Storm map (Leaflet) — shown in storm mode -->
+      <div id="stormMapWrap" style="display:none;position:absolute;inset:0;z-index:6">
+        <div id="stormMap" style="width:100%;height:100%"></div>
+        <div id="stormBanner">Loading live storm data…</div>
+        <div id="stormLegend">
+          <span><i style="background:#f47067"></i> Warning</span>
+          <span><i style="background:#f2a33c"></i> Watch</span>
+          <span><i class="dot" style="background:#e84a5f"></i> Storm center</span>
+        </div>
+        <button id="scanWarnedBtn" class="btn btn-green" onclick="scanWarnedArea()" title="Scan roofing/window contractors across the storm-warning area">🌀 Scan Warned Area</button>
+      </div>
     </div>
 
     <div class="map-footer">
-      <div class="legend">
+      <div class="legend counties-only">
         <div class="leg-item"><div class="leg-dot" style="background:rgba(94,106,210,.45);border-color:#5e6ad2"></div> Selected</div>
         <div class="leg-item"><div class="leg-dot" style="background:rgba(61,214,140,.18);border-color:#3dd68c"></div> Already scanned</div>
         <div class="leg-item"><div class="leg-dot" style="background:var(--surface3);border-color:var(--border-light)"></div> Not scanned</div>
       </div>
-      <div class="map-btns">
+      <div class="map-btns counties-only">
         <button class="btn btn-sm" onclick="selectAll()">Select All</button>
         <button class="btn btn-sm" onclick="clearSelection()">Clear</button>
         <button class="btn btn-sm" id="resetCacheBtn" onclick="clearScanCache()" style="margin-left:auto;color:var(--muted);display:none">Reset cache (team)</button>
@@ -172,8 +210,7 @@ td.rating{white-space:nowrap;}
     </div>
 
     <div class="scan-controls">
-      <button class="btn btn-green" id="scanBtn" style="width:100%;padding:10px;font-size:13px;" onclick="startScan()">Scan Selected Counties</button>
-      <button class="btn" id="stormBtn" style="width:100%;padding:9px;font-size:12px;margin-top:6px;background:#3a2a5e;border-color:#5e4a9e;color:#c7b8ff" onclick="scanStormPath()" title="One-click scan of the coastal counties along the current storm track (TX, LA, MS, AL + FL panhandle)">🌀 Scan Storm Path (Gulf Coast)</button>
+      <button class="btn btn-green counties-only" id="scanBtn" style="width:100%;padding:10px;font-size:13px;" onclick="startScan()">Scan Selected Counties</button>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-bar-outer"><div class="progress-bar-inner" id="progressBar" style="width:0%"></div></div>
         <div class="progress-text" id="progressText">Starting…</div>
@@ -248,33 +285,6 @@ const FL_COUNTIES = [
   {name:'Monroe',lat:25.0,lng:-81.0},
 ];
 const COUNTY_BY_NAME = Object.fromEntries(FL_COUNTIES.map(c => [c.name, c]));
-
-// ── Storm-path preset (Gulf Coast) ──
-// FL panhandle counties already exist on the map above; listed here by name so
-// the "Storm Path" button includes them too.
-const FL_PANHANDLE = ['Escambia','Santa Rosa','Okaloosa','Walton','Bay','Gulf','Franklin','Wakulla'];
-// Out-of-state coastal counties / parishes along the current Gulf storm track.
-// Named "County, ST" so their scan-cache and saved county stay distinct from FL.
-const STORM_PATH_COUNTIES = [
-  // Alabama
-  {name:'Mobile, AL',        lat:30.68, lng:-88.10}, {name:'Baldwin, AL',       lat:30.54, lng:-87.72},
-  // Mississippi
-  {name:'Jackson, MS',       lat:30.46, lng:-88.62}, {name:'Harrison, MS',      lat:30.41, lng:-89.09},
-  {name:'Hancock, MS',       lat:30.39, lng:-89.47},
-  // Louisiana
-  {name:'St. Tammany, LA',   lat:30.40, lng:-90.00}, {name:'Orleans, LA',       lat:29.97, lng:-90.07},
-  {name:'St. Bernard, LA',   lat:29.87, lng:-89.80}, {name:'Plaquemines, LA',   lat:29.55, lng:-89.70},
-  {name:'Jefferson, LA',     lat:29.75, lng:-90.12}, {name:'Lafourche, LA',     lat:29.50, lng:-90.40},
-  {name:'Terrebonne, LA',    lat:29.42, lng:-90.80}, {name:'St. Mary, LA',      lat:29.70, lng:-91.35},
-  {name:'Iberia, LA',        lat:29.95, lng:-91.78}, {name:'Vermilion, LA',     lat:29.85, lng:-92.30},
-  {name:'Lafayette, LA',     lat:30.22, lng:-92.02}, {name:'Calcasieu, LA',     lat:30.23, lng:-93.20},
-  {name:'Cameron, LA',       lat:29.80, lng:-93.30}, {name:'East Baton Rouge, LA', lat:30.45, lng:-91.13},
-  // Texas (upper/central coast)
-  {name:'Orange, TX',        lat:30.10, lng:-93.75}, {name:'Jefferson, TX',     lat:29.95, lng:-94.10},
-  {name:'Chambers, TX',      lat:29.70, lng:-94.62}, {name:'Galveston, TX',     lat:29.30, lng:-94.85},
-  {name:'Harris, TX',        lat:29.76, lng:-95.37}, {name:'Brazoria, TX',      lat:29.17, lng:-95.43},
-  {name:'Matagorda, TX',     lat:28.80, lng:-96.00}, {name:'Nueces, TX',        lat:27.80, lng:-97.40},
-];
 
 // Florida county FIPS → county name
 const FIPS_TO_COUNTY = {
@@ -662,6 +672,126 @@ function getSelectedTypes() {
   return [...document.querySelectorAll('.type-chip.active')].map(b => b.dataset.type);
 }
 
+// ── Storm map (Leaflet + live NOAA data) ──
+let stormMap = null, stormInited = false, stormWarnings = { type:'FeatureCollection', features: [] };
+let _stormLayers = [];
+
+function setMapMode(mode){
+  const storm = mode === 'storm';
+  document.querySelector('.panel').classList.toggle('storm-mode', storm);
+  document.getElementById('stormMapWrap').style.display = storm ? 'block' : 'none';
+  document.getElementById('flMap').style.display = storm ? 'none' : '';
+  document.getElementById('mapModeCounties').classList.toggle('active', !storm);
+  document.getElementById('mapModeStorm').classList.toggle('active', storm);
+  if (storm) initStormMap();
+}
+
+async function initStormMap(){
+  if (!stormInited){
+    stormInited = true;
+    stormMap = L.map('stormMap', { zoomControl: false, attributionControl: false }).setView([28.5, -89], 5);
+    L.control.zoom({ position: 'bottomright' }).addTo(stormMap);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 12, subdomains: 'abcd' }).addTo(stormMap);
+    await refreshStormData();
+  } else {
+    setTimeout(() => stormMap.invalidateSize(), 60);
+  }
+}
+
+async function refreshStormData(){
+  const banner = document.getElementById('stormBanner');
+  try {
+    const d = await (await fetch('/storm-data')).json();
+    stormWarnings = d.warnings || { type:'FeatureCollection', features: [] };
+    _stormLayers.forEach(l => stormMap.removeLayer(l));
+    _stormLayers = [];
+    const warnLayer = L.geoJSON(stormWarnings, {
+      style: f => {
+        const watch = /Watch/i.test(f.properties.event || '');
+        return { color: watch ? '#f2a33c' : '#f47067', weight: 1, fillColor: watch ? '#f2a33c' : '#f47067', fillOpacity: 0.22 };
+      },
+      onEachFeature: (f, layer) => layer.bindPopup(`<b>${f.properties.event||'Alert'}</b><br>${(f.properties.area||'').slice(0,140)}`)
+    }).addTo(stormMap);
+    _stormLayers.push(warnLayer);
+    // Atlantic/Gulf storm centers only
+    const gulfStorms = (d.storms||[]).filter(s => s.lng > -100 && s.lng < -60 && s.lat > 15 && s.lat < 45);
+    gulfStorms.forEach(s => {
+      const m = L.circleMarker([s.lat, s.lng], { radius: 9, color: '#fff', weight: 2, fillColor: '#e84a5f', fillOpacity: 1 })
+        .bindPopup(`<b>🌀 ${s.name}</b> (${s.classification})<br>${s.intensity||'?'} kt · moving ${s.movementDir||'?'} at ${s.movementSpeed||'?'} kt`)
+        .addTo(stormMap);
+      _stormLayers.push(m);
+    });
+    try { const b = warnLayer.getBounds(); if (b.isValid()) stormMap.fitBounds(b, { padding: [30,30], maxZoom: 7 }); } catch(e){}
+    const n = stormWarnings.features.length;
+    const names = gulfStorms.map(s => `${s.name} (${s.classification})`).join(', ');
+    banner.textContent = n
+      ? `🌀 ${names || 'Active storm'} — ${n} warning/watch area${n===1?'':'s'} highlighted. Tap “Scan Warned Area”.`
+      : (names ? `🌀 ${names} — no land warnings active right now.` : 'No active tropical warnings right now.');
+  } catch(e){
+    banner.textContent = 'Could not load storm data — try again shortly.';
+    console.error('storm-data', e);
+  }
+}
+
+// Point-in-polygon (ray casting) for Polygon / MultiPolygon GeoJSON
+function _pipRing(lng, lat, ring){
+  let inside = false;
+  for (let i=0, j=ring.length-1; i<ring.length; j=i++){
+    const xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
+    if (((yi>lat)!==(yj>lat)) && (lng < (xj-xi)*(lat-yi)/(yj-yi)+xi)) inside = !inside;
+  }
+  return inside;
+}
+function pointInGeom(lng, lat, geom){
+  const polys = geom.type === 'MultiPolygon' ? geom.coordinates : geom.type === 'Polygon' ? [geom.coordinates] : [];
+  for (const poly of polys){
+    if (_pipRing(lng, lat, poly[0])){
+      let hole = false;
+      for (let k=1;k<poly.length;k++){ if (_pipRing(lng, lat, poly[k])){ hole = true; break; } }
+      if (!hole) return true;
+    }
+  }
+  return false;
+}
+function geomBbox(geom){
+  let minLng=180, minLat=90, maxLng=-180, maxLat=-90;
+  const polys = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
+  polys.forEach(poly => poly[0].forEach(([lng,lat]) => {
+    if(lng<minLng)minLng=lng; if(lng>maxLng)maxLng=lng;
+    if(lat<minLat)minLat=lat; if(lat>maxLat)maxLat=lat;
+  }));
+  return { minLng, minLat, maxLng, maxLat };
+}
+
+async function scanWarnedArea(){
+  if (scanning){ stopFlag = true; return; }
+  const types = getSelectedTypes();
+  if (!types.length){ alert('Select at least one contractor type first (top of the panel).'); return; }
+  if (!stormWarnings.features.length){ alert('There are no active storm-warning areas to scan right now.'); return; }
+  const force = document.getElementById('forceRescan').checked;
+  const step = 0.35; // ~38 km grid
+  const seen = new Set(); const pts = [];
+  for (const f of stormWarnings.features){
+    if (!f.geometry) continue;
+    const label = (f.properties.area || 'Storm area').split(';')[0].trim();
+    const bb = geomBbox(f.geometry);
+    for (let lat = Math.ceil(bb.minLat/step)*step; lat <= bb.maxLat; lat += step){
+      for (let lng = Math.ceil(bb.minLng/step)*step; lng <= bb.maxLng; lng += step){
+        if (!pointInGeom(lng, lat, f.geometry)) continue;
+        const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+        if (seen.has(key)) continue; seen.add(key);
+        pts.push({ name: `${label} (${lat.toFixed(2)},${lng.toFixed(2)})`, lat, lng });
+      }
+    }
+  }
+  if (!pts.length){ alert('Could not build scan points from the warning areas.'); return; }
+  const MAX = 90;
+  let scanPts = pts;
+  if (pts.length > MAX){ const nth = Math.ceil(pts.length/MAX); scanPts = pts.filter((_,i)=>i%nth===0); }
+  if (!confirm(`🌀 Scan the storm-warning area?\n${scanPts.length} scan points across the warned coastline × ${types.length} type(s).\nEach point makes Google API calls.`)) return;
+  await executeScan(scanPts, types, force);
+}
+
 // ── Scan ──
 async function startScan() {
   if (scanning) { stopFlag = true; return; }
@@ -683,25 +813,7 @@ async function startScan() {
   await executeScan(countiesToScan, types, force);
 }
 
-// One-click scan of the coastal counties along the current Gulf storm track.
-async function scanStormPath() {
-  if (scanning) { stopFlag = true; return; }
-  const types = getSelectedTypes();
-  if (!types.length) { alert('Select at least one contractor type above the map first.'); return; }
-  const force = document.getElementById('forceRescan').checked;
-  // FL panhandle counties already live on the map; the rest are out-of-state coastal areas.
-  const flPanhandle = FL_PANHANDLE.map(n => COUNTY_BY_NAME[n]).filter(Boolean);
-  const all = [...flPanhandle, ...STORM_PATH_COUNTIES];
-  const countiesToScan = all.filter(c => force || types.some(t => !isScanned(c.name, t)));
-  if (!countiesToScan.length) {
-    alert('The whole storm path has already been scanned for these types this month.\nCheck "Re-scan already scanned counties" to run it again.');
-    return;
-  }
-  if (!confirm(`🌀 Scan the storm path?\n${countiesToScan.length} coastal areas across TX, LA, MS, AL & the FL panhandle × ${types.length} type(s).\nEach area uses Google API calls.`)) return;
-  await executeScan(countiesToScan, types, force);
-}
-
-// Shared scan engine used by both the map scan and the storm-path preset.
+// Shared scan engine used by both the county map scan and the storm-map scan.
 async function executeScan(countiesToScan, types, force) {
   if (!apiKey) {
     const { data } = await supabaseClient.from('shared_settings').select('google_key').eq('id',1).single();
@@ -723,6 +835,7 @@ async function executeScan(countiesToScan, types, force) {
   scanning = true;
   stopFlag = false;
   document.getElementById('scanBtn').textContent = '⏹ Stop';
+  const _wb = document.getElementById('scanWarnedBtn'); if (_wb) _wb.textContent = '⏹ Stop';
   document.getElementById('progressWrap').style.display = 'flex';
 
   const radius = 30000;
@@ -743,6 +856,7 @@ async function executeScan(countiesToScan, types, force) {
   scanning = false;
   stopFlag = false;
   document.getElementById('scanBtn').textContent = 'Scan Selected Counties';
+  if (_wb) _wb.textContent = '🌀 Scan Warned Area';
   setProgress(jobs.length, jobs.length, `Done — ${results.length} companies found`);
 }
 
