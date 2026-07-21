@@ -318,7 +318,9 @@ tr:hover td{background:rgba(108,99,255,.04);}
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">RapidAPI Key (IG fallback)<input id="rapidApiKeyInput" type="password" placeholder="RapidAPI key" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Resend API Key (auto-email)<input id="resendKeyInput" type="password" placeholder="re_..." style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
     <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">Email From Address<input id="resendFromInput" placeholder="You <you@yourdomain.com>" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
+    <label style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;display:flex;flex-direction:column;gap:4px">🌀 Storm Alert Recipients <span style="font-weight:400;text-transform:none;color:var(--muted2)">comma-separated emails — get an email when a new Gulf/Atlantic storm forms</span><input id="stormAlertInput" placeholder="coworker@email.com, you@email.com" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:5px 10px;outline:none;width:280px"/></label>
     <button class="btn btn-p" style="align-self:flex-end" onclick="saveEmailSettings()">Save Email Settings</button>
+    <button class="btn" style="align-self:flex-end" onclick="sendStormTest()">Send Test Alert</button>
   </div>
   <div id="presetTagsPanel" style="display:none;padding:10px 16px 14px;background:var(--surface);border-bottom:1px solid var(--border);gap:10px;flex-direction:column">
     <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Preset Tags</div>
@@ -2844,10 +2846,28 @@ async function saveEmailSettings(){
   if(!isAdmin()){ showToast('Only the admin can change email settings'); return; }
   const key = document.getElementById('resendKeyInput').value.trim();
   const from = document.getElementById('resendFromInput').value.trim();
-  const {error} = await supabaseClient.from('shared_settings').update({resend_key:key||null, resend_from:from||null}).eq('id',1);
-  if(error){ showToast('❌ Save failed — are resend_key/resend_from columns added in Supabase?'); console.error(error); return; }
+  const stormEmails = document.getElementById('stormAlertInput').value.trim();
+  const {error} = await supabaseClient.from('shared_settings').update({resend_key:key||null, resend_from:from||null, storm_alert_emails:stormEmails||null}).eq('id',1);
+  if(error){ showToast('❌ Save failed — are the resend_key/resend_from/storm_alert_emails columns added in Supabase?'); console.error(error); return; }
   window._resendEnabled = !!key;
   showToast('✅ Email settings saved' + (key ? ' — auto-send is ON' : ' — auto-send is OFF'));
+}
+
+async function sendStormTest(){
+  if(!isAdmin()){ showToast('Only the admin can send a test'); return; }
+  const recipients = document.getElementById('stormAlertInput').value.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!recipients.length){ showToast('Add at least one recipient email first'); return; }
+  showToast('📤 Sending test alert…');
+  let sent = 0;
+  for(const to of recipients){
+    try{
+      const r = await fetch('/send-email', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ to, subject:'🌀 Test — LeadScout storm alert', text:'This is a test. When a new Gulf/Atlantic storm forms, you\'ll get an alert like this automatically.\n\nOpen the Storm Map: https://leadscout-production-f926.up.railway.app/contractors' }) });
+      const j = await r.json();
+      if(j.ok) sent++;
+    }catch(e){}
+  }
+  showToast(sent ? `✅ Test sent to ${sent}/${recipients.length}` : '❌ Test failed — check the Resend key');
 }
 
 // ── Pending account approvals (admin only) ──
@@ -2906,11 +2926,12 @@ function togglePendingPanel(){
   }
   loadProfileNames();
   // Email auto-send: on if a Resend key is saved in shared_settings
-  const { data: emailSettings } = await supabaseClient.from('shared_settings').select('resend_key,resend_from').eq('id',1).single();
+  const { data: emailSettings } = await supabaseClient.from('shared_settings').select('resend_key,resend_from,storm_alert_emails').eq('id',1).single();
   window._resendEnabled = !!emailSettings?.resend_key;
   if (isAdmin()) {
     if(emailSettings?.resend_key) document.getElementById('resendKeyInput').value = emailSettings.resend_key;
     if(emailSettings?.resend_from) document.getElementById('resendFromInput').value = emailSettings.resend_from;
+    if(emailSettings?.storm_alert_emails) document.getElementById('stormAlertInput').value = emailSettings.storm_alert_emails;
   }
   // Load Apollo key from localStorage
   const savedApollo = localStorage.getItem('leadscout_apollo_key');

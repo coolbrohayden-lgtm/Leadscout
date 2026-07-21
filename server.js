@@ -140,6 +140,89 @@ function getSharedSettings() {
   });
 }
 
+// ── Storm alert notifier (server-side) ──
+function supaGet(pathAndQuery) {
+  return new Promise((resolve) => {
+    const u = new URL(SUPA_URL + '/rest/v1/' + pathAndQuery);
+    https.get({ hostname: u.hostname, path: u.pathname + u.search,
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` } }, (r) => {
+      let d = ''; r.on('data', c => d += c);
+      r.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { resolve([]); } });
+    }).on('error', () => resolve([]));
+  });
+}
+function supaInsert(table, row) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify(row);
+    const u = new URL(SUPA_URL + '/rest/v1/' + table);
+    const rq = https.request({ hostname: u.hostname, path: u.pathname, method: 'POST',
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`,
+        'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), Prefer: 'return=minimal' } },
+      (r) => { r.on('data', () => {}); r.on('end', () => resolve(r.statusCode)); });
+    rq.on('error', () => resolve(0));
+    rq.write(body); rq.end();
+  });
+}
+async function sendResendEmail(to, subject, text) {
+  const settings = await getSharedSettings();
+  if (!settings.resend_key) return { ok: false, error: 'no resend key' };
+  const from = settings.resend_from || 'LeadScout <onboarding@resend.dev>';
+  return new Promise((resolve) => {
+    const payload = JSON.stringify({ from, to: [to], subject, text });
+    const rq = https.request({ hostname: 'api.resend.com', path: '/emails', method: 'POST',
+      headers: { Authorization: `Bearer ${settings.resend_key}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } },
+      (r) => { let d = ''; r.on('data', c => d += c); r.on('end', () => resolve({ ok: r.statusCode >= 200 && r.statusCode < 300, status: r.statusCode })); });
+    rq.on('error', (e) => resolve({ ok: false, error: e.message }));
+    rq.setTimeout(15000, () => { rq.destroy(); resolve({ ok: false, error: 'timeout' }); });
+    rq.write(payload); rq.end();
+  });
+}
+
+// Poll NOAA and email configured recipients when a NEW Atlantic/Gulf storm appears.
+async function checkStormsAndNotify() {
+  try {
+    const settings = await getSharedSettings();
+    const recipients = (settings.storm_alert_emails || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!recipients.length || !settings.resend_key) return; // not configured yet
+
+    const nhc = JSON.parse(await fetchPageDirect('https://www.nhc.noaa.gov/CurrentStorms.json'));
+    const storms = (nhc.activeStorms || []).filter(s =>
+      typeof s.latitudeNumeric === 'number' && typeof s.longitudeNumeric === 'number' &&
+      s.longitudeNumeric > -100 && s.longitudeNumeric < -55 && s.latitudeNumeric > 10 && s.latitudeNumeric < 50);
+
+    const seen = await supaGet('storm_notifications?select=storm_id');
+    const seenArr = Array.isArray(seen) ? seen : [];
+    const seenIds = new Set(seenArr.map(r => r.storm_id));
+    const hasBaseline = seenIds.has('__baseline__');
+
+    // First run ever: silently baseline whatever is already active so we only alert on NEW storms.
+    if (!hasBaseline) {
+      for (const s of storms) if (!seenIds.has(s.id)) await supaInsert('storm_notifications', { storm_id: s.id, name: s.name, classification: s.classification });
+      await supaInsert('storm_notifications', { storm_id: '__baseline__', name: 'baseline', classification: '-' });
+      console.log('storm-notify: baseline set (' + storms.length + ' active storms recorded, no emails)');
+      return;
+    }
+
+    for (const s of storms) {
+      if (seenIds.has(s.id)) continue;
+      const subject = `🌀 New storm: ${s.name} (${s.classification})`;
+      const text =
+        `A new tropical system is active in the Atlantic/Gulf.\n\n` +
+        `Name: ${s.name}\nType: ${s.classification}\nWinds: ${s.intensity || '?'} kt\n` +
+        `Position: ${s.latitudeNumeric}, ${s.longitudeNumeric}\n` +
+        `Moving: ${s.movementDir || '?'} at ${s.movementSpeed || '?'} kt\n\n` +
+        `Open the Storm Map to see the warning areas and scan contractors in the path:\n` +
+        `https://leadscout-production-f926.up.railway.app/contractors`;
+      let anySent = false;
+      for (const to of recipients) { const r = await sendResendEmail(to, subject, text); if (r.ok) anySent = true; }
+      if (anySent) {
+        await supaInsert('storm_notifications', { storm_id: s.id, name: s.name, classification: s.classification });
+        console.log('storm-notify: alerted', recipients.length, 'recipient(s) about', s.name, s.id);
+      }
+    }
+  } catch (e) { console.error('storm-notify:', e.message); }
+}
+
 function httpsGet(apiUrl) {
   return new Promise((resolve, reject) => {
     https.get(apiUrl, (res) => {
@@ -831,3 +914,7 @@ server.listen(PORT, () => {
   console.log('  Press Ctrl+C to stop.');
   console.log('');
 });
+
+// Storm-alert watcher: baseline shortly after boot, then check every 20 minutes.
+setTimeout(checkStormsAndNotify, 30 * 1000);
+setInterval(checkStormsAndNotify, 20 * 60 * 1000);
