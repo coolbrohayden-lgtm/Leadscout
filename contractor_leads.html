@@ -173,6 +173,7 @@ td.rating{white-space:nowrap;}
 
     <div class="scan-controls">
       <button class="btn btn-green" id="scanBtn" style="width:100%;padding:10px;font-size:13px;" onclick="startScan()">Scan Selected Counties</button>
+      <button class="btn" id="stormBtn" style="width:100%;padding:9px;font-size:12px;margin-top:6px;background:#3a2a5e;border-color:#5e4a9e;color:#c7b8ff" onclick="scanStormPath()" title="One-click scan of the coastal counties along the current storm track (TX, LA, MS, AL + FL panhandle)">🌀 Scan Storm Path (Gulf Coast)</button>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-bar-outer"><div class="progress-bar-inner" id="progressBar" style="width:0%"></div></div>
         <div class="progress-text" id="progressText">Starting…</div>
@@ -247,6 +248,33 @@ const FL_COUNTIES = [
   {name:'Monroe',lat:25.0,lng:-81.0},
 ];
 const COUNTY_BY_NAME = Object.fromEntries(FL_COUNTIES.map(c => [c.name, c]));
+
+// ── Storm-path preset (Gulf Coast) ──
+// FL panhandle counties already exist on the map above; listed here by name so
+// the "Storm Path" button includes them too.
+const FL_PANHANDLE = ['Escambia','Santa Rosa','Okaloosa','Walton','Bay','Gulf','Franklin','Wakulla'];
+// Out-of-state coastal counties / parishes along the current Gulf storm track.
+// Named "County, ST" so their scan-cache and saved county stay distinct from FL.
+const STORM_PATH_COUNTIES = [
+  // Alabama
+  {name:'Mobile, AL',        lat:30.68, lng:-88.10}, {name:'Baldwin, AL',       lat:30.54, lng:-87.72},
+  // Mississippi
+  {name:'Jackson, MS',       lat:30.46, lng:-88.62}, {name:'Harrison, MS',      lat:30.41, lng:-89.09},
+  {name:'Hancock, MS',       lat:30.39, lng:-89.47},
+  // Louisiana
+  {name:'St. Tammany, LA',   lat:30.40, lng:-90.00}, {name:'Orleans, LA',       lat:29.97, lng:-90.07},
+  {name:'St. Bernard, LA',   lat:29.87, lng:-89.80}, {name:'Plaquemines, LA',   lat:29.55, lng:-89.70},
+  {name:'Jefferson, LA',     lat:29.75, lng:-90.12}, {name:'Lafourche, LA',     lat:29.50, lng:-90.40},
+  {name:'Terrebonne, LA',    lat:29.42, lng:-90.80}, {name:'St. Mary, LA',      lat:29.70, lng:-91.35},
+  {name:'Iberia, LA',        lat:29.95, lng:-91.78}, {name:'Vermilion, LA',     lat:29.85, lng:-92.30},
+  {name:'Lafayette, LA',     lat:30.22, lng:-92.02}, {name:'Calcasieu, LA',     lat:30.23, lng:-93.20},
+  {name:'Cameron, LA',       lat:29.80, lng:-93.30}, {name:'East Baton Rouge, LA', lat:30.45, lng:-91.13},
+  // Texas (upper/central coast)
+  {name:'Orange, TX',        lat:30.10, lng:-93.75}, {name:'Jefferson, TX',     lat:29.95, lng:-94.10},
+  {name:'Chambers, TX',      lat:29.70, lng:-94.62}, {name:'Galveston, TX',     lat:29.30, lng:-94.85},
+  {name:'Harris, TX',        lat:29.76, lng:-95.37}, {name:'Brazoria, TX',      lat:29.17, lng:-95.43},
+  {name:'Matagorda, TX',     lat:28.80, lng:-96.00}, {name:'Nueces, TX',        lat:27.80, lng:-97.40},
+];
 
 // Florida county FIPS → county name
 const FIPS_TO_COUNTY = {
@@ -652,7 +680,29 @@ async function startScan() {
     alert('All selected counties have already been scanned for the chosen types.\nCheck "Re-scan already scanned counties" to run again.');
     return;
   }
+  await executeScan(countiesToScan, types, force);
+}
 
+// One-click scan of the coastal counties along the current Gulf storm track.
+async function scanStormPath() {
+  if (scanning) { stopFlag = true; return; }
+  const types = getSelectedTypes();
+  if (!types.length) { alert('Select at least one contractor type above the map first.'); return; }
+  const force = document.getElementById('forceRescan').checked;
+  // FL panhandle counties already live on the map; the rest are out-of-state coastal areas.
+  const flPanhandle = FL_PANHANDLE.map(n => COUNTY_BY_NAME[n]).filter(Boolean);
+  const all = [...flPanhandle, ...STORM_PATH_COUNTIES];
+  const countiesToScan = all.filter(c => force || types.some(t => !isScanned(c.name, t)));
+  if (!countiesToScan.length) {
+    alert('The whole storm path has already been scanned for these types this month.\nCheck "Re-scan already scanned counties" to run it again.');
+    return;
+  }
+  if (!confirm(`🌀 Scan the storm path?\n${countiesToScan.length} coastal areas across TX, LA, MS, AL & the FL panhandle × ${types.length} type(s).\nEach area uses Google API calls.`)) return;
+  await executeScan(countiesToScan, types, force);
+}
+
+// Shared scan engine used by both the map scan and the storm-path preset.
+async function executeScan(countiesToScan, types, force) {
   if (!apiKey) {
     const { data } = await supabaseClient.from('shared_settings').select('google_key').eq('id',1).single();
     apiKey = data?.google_key;
