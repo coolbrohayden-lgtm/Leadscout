@@ -859,7 +859,7 @@ function render(){
       const ownerHtml = l.owner_name
         ? `<div style="font-size:11px;font-weight:600">${l.owner_name}</div>
            ${l.owner_phone?`<div style="font-size:10px;color:var(--accent)">${fmtPhone(l.owner_phone)}${phoneCopyBtn(l.owner_phone)}</div>`:''}
-           ${l.owner_email?`<div style="font-size:10px;color:var(--muted)">${l.owner_email}</div>`:''}
+           ${l.owner_email?`<div style="font-size:10px;color:var(--muted)">${l.owner_email}${copyBtn(l.owner_email,'Copy email')}</div>`:''}
            <div style="font-size:9px;color:var(--muted);margin-top:1px">${l.owner_source||''}</div>
            <button class="btn" style="font-size:8px;padding:1px 5px;margin-top:2px;opacity:0.5" onclick="clearOwner('${l.place_id}')">✕ Clear</button>`
         : `<button class="btn" style="font-size:9px;padding:2px 7px;white-space:nowrap" onclick="enrichLead('${l.place_id}')">🔍 Find Owner</button>`;
@@ -889,7 +889,7 @@ function render(){
         <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
         <td style="white-space:nowrap">
           ${fmtPhone(l.phone)}${phoneCopyBtn(l.phone)}
-          ${l.business_email?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><a href="mailto:${l.business_email}" style="color:var(--muted);text-decoration:none">✉️ ${l.business_email}</a></div>`:''}
+          ${l.business_email?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><a href="mailto:${l.business_email}" style="color:var(--muted);text-decoration:none">✉️ ${l.business_email}</a>${copyBtn(l.business_email,'Copy email')}</div>`:''}
         </td>
         <td style="min-width:140px" id="owner-${l.place_id}">${ownerHtml}</td>
         <td style="font-weight:700;color:var(--accent)">${l.score||0}</td>
@@ -1756,7 +1756,8 @@ async function copyText(text, btn){
     btn._copyTimer = setTimeout(()=>{ btn.textContent=btn._copyOrig; btn.classList.remove('copied'); btn._copyTimer=null; }, 1200);
   }
 }
-function phoneCopyBtn(phone){ return phone?`<button class="copy-btn" title="Copy number" onclick="event.stopPropagation();copyText('${jsq(phone)}', this)">📋</button>`:''; }
+function phoneCopyBtn(phone){ return copyBtn(phone, 'Copy number'); }
+function copyBtn(text, title){ return text?`<button class="copy-btn" title="${title||'Copy'}" onclick="event.stopPropagation();copyText('${jsq(text)}', this)">📋</button>`:''; }
 
 function fmtDate(input) {
   if (!input) return '';
