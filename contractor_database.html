@@ -117,6 +117,36 @@ td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
 .status-sel.st-qualified{color:var(--green-light);border-color:rgba(61,214,140,.4);}
 .status-sel.st-closed{color:var(--hot);border-color:rgba(244,112,103,.4);}
 
+/* Copy-number button */
+.phone-wrap{display:inline-flex;align-items:center;gap:5px;}
+.copy-btn{border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;line-height:1;cursor:pointer;border-radius:5px;padding:3px 6px;font-family:inherit;transition:all .12s;flex-shrink:0;}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent);}
+.copy-btn.copied{border-color:var(--green-light);color:var(--green-light);}
+
+/* Inline notes field */
+td.notes-cell{min-width:150px;max-width:200px;}
+.notes-input{background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:11px;font-family:inherit;width:100%;padding:3px 0;outline:none;transition:border .15s;}
+.notes-input:focus{border-bottom-color:var(--accent);}
+.notes-input::placeholder{color:var(--muted2);}
+.pipe-card .notes-input{border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 7px;margin-top:6px;background:var(--surface);}
+
+/* Add-stage button + stage delete */
+.add-stage-btn{min-width:150px;flex-shrink:0;align-self:flex-start;border:2px dashed var(--border);border-radius:var(--radius);background:transparent;color:var(--muted);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;padding:18px;transition:all .15s;}
+.add-stage-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(94,106,210,.06);}
+
+/* Stage modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(5,7,10,.72);backdrop-filter:blur(3px);z-index:1000;display:none;align-items:center;justify-content:center;}
+.modal{background:var(--surface);border:1px solid var(--border-light);border-radius:12px;padding:24px;width:340px;max-width:90%;position:relative;display:flex;flex-direction:column;gap:14px;}
+.modal h3{font-size:15px;font-weight:800;}
+.modal label{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);display:flex;flex-direction:column;gap:5px;}
+.modal input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;font-family:inherit;padding:8px 10px;outline:none;}
+.modal input:focus{border-color:var(--accent);}
+.modal-close{position:absolute;top:12px;right:14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;width:28px;height:28px;cursor:pointer;color:var(--muted);font-size:13px;}
+.stage-colors{display:flex;gap:8px;}
+.swatch{width:26px;height:26px;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:transform .1s;}
+.swatch:hover{transform:scale(1.12);}
+.swatch.sel{border-color:#fff;}
+
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px;}
@@ -173,6 +203,7 @@ td.date{color:var(--muted2);font-size:11px;white-space:nowrap;}
         <th class="no-sort">Email</th>
         <th class="no-sort">Website</th>
         <th class="no-sort">Address</th>
+        <th class="no-sort">Notes</th>
         <th onclick="sortBy('saved_at')">Saved</th>
         <th class="no-sort"></th>
       </tr>
@@ -259,23 +290,51 @@ function setView(v) {
 }
 
 const PIPE_STAGES = [
-  { id:'new',       title:'New',       color:'#8a8f98' },
-  { id:'contacted', title:'Contacted', color:'#ffb432' },
-  { id:'qualified', title:'Qualified', color:'#3dd68c' },
-  { id:'closed',    title:'Closed',    color:'#f47067' },
+  { id:'new',       title:'New',       color:'#8a8f98', builtin:true },
+  { id:'contacted', title:'Contacted', color:'#ffb432', builtin:true },
+  { id:'qualified', title:'Qualified', color:'#3dd68c', builtin:true },
+  { id:'closed',    title:'Closed',    color:'#f47067', builtin:true },
 ];
+
+// ── Custom stages (shared with the team via shared_settings.contractor_pipeline_stages) ──
+let customStages = [];
+async function loadCustomStages() {
+  try {
+    const { data, error } = await supabaseClient.from('shared_settings').select('contractor_pipeline_stages').eq('id', 1).single();
+    if (error) throw error;
+    try { customStages = JSON.parse(data?.contractor_pipeline_stages || '[]'); } catch(_) { customStages = []; }
+  } catch (e) {
+    try { customStages = JSON.parse(localStorage.getItem('contractor_custom_stages') || '[]'); } catch(_) { customStages = []; }
+  }
+  if (!Array.isArray(customStages)) customStages = [];
+}
+async function saveCustomStages() {
+  localStorage.setItem('contractor_custom_stages', JSON.stringify(customStages));
+  // upsert (not update+eq) so it also works if the shared_settings id=1 row doesn't exist yet
+  const { error } = await supabaseClient.from('shared_settings').upsert({ id: 1, contractor_pipeline_stages: JSON.stringify(customStages) });
+  if (error) console.warn('Custom stages saved to this browser only — add a contractor_pipeline_stages (text) column to shared_settings to share them with the team:', error.message);
+}
+function getAllStages() { return [...PIPE_STAGES, ...customStages]; }
+function populateStatusFilter(){
+  const sel = document.getElementById('filterStatus');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All Statuses</option>' +
+    getAllStages().map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('');
+  sel.value = getAllStages().some(s=>s.id===cur) ? cur : '';
+}
 
 // ── Per-person board layout: column order + which columns are minimized ──
 function stageOrderIds() {
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem('contractor_stage_order') || '[]'); } catch(e){}
-  const ids = PIPE_STAGES.map(s => s.id);
+  const ids = getAllStages().map(s => s.id);
   const ordered = saved.filter(id => ids.includes(id));
   ids.forEach(id => { if (!ordered.includes(id)) ordered.push(id); });
   return ordered;
 }
 function orderedStages() {
-  const byId = Object.fromEntries(PIPE_STAGES.map(s => [s.id, s]));
+  const byId = Object.fromEntries(getAllStages().map(s => [s.id, s]));
   return stageOrderIds().map(id => byId[id]).filter(Boolean);
 }
 let collapsedStages = new Set((() => { try { return JSON.parse(localStorage.getItem('contractor_stage_collapsed') || '[]'); } catch(e){ return []; } })());
@@ -316,34 +375,49 @@ function animatePipeline(mutate) {
 
 function renderPipeline(rows) {
   const wrap = document.getElementById('pipelineView');
-  const stages = orderedStages();
+  const baseStages = orderedStages();
+  // Safety net: if a lead's stage isn't defined on this browser (a custom stage
+  // that hasn't synced here yet), show a "ghost" column so leads never vanish.
+  const known = new Set(baseStages.map(s => s.id));
+  const ghostIds = [...new Set(rows.map(r => r.status).filter(s => s && s !== 'new' && !known.has(s)))];
+  const stages = [...baseStages, ...ghostIds.map(id => ({ id, title: id, color: '#8a8f98', ghost: true }))];
   wrap.innerHTML = `<div class="pipeline-wrap">` + stages.map((st, i) => {
     const cards = rows.filter(r => (r.status || 'new') === st.id);
+    if (st.ghost) {
+      return `<div class="pipe-col" data-stage-id="${attrEsc(st.id)}" style="--pipe-color:#8a8f98" title="Unrecognized stage (${attrEsc(st.id)}) — drag these leads to a real column to re-file them">
+        <div class="pipe-col-head"><span class="t">⚠ Other</span><span class="n">${cards.length}</span></div>
+        <div class="pipe-col-body">
+          ${cards.length ? cards.map(pipeCard).join('') : '<div class="pipe-empty"></div>'}
+        </div>
+      </div>`;
+    }
     if (collapsedStages.has(st.id)) {
-      return `<div class="pipe-col collapsed" data-stage-id="${st.id}" style="--pipe-color:${st.color}" onclick="toggleStageCollapse('${st.id}')" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')" title="Expand ${st.title}">
+      return `<div class="pipe-col collapsed" data-stage-id="${st.id}" style="--pipe-color:${safeColor(st.color)}" onclick="toggleStageCollapse('${st.id}')" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')" title="Expand ${attrEsc(st.title)}">
         <div class="pipe-col-collapsed-inner">
           <span class="cc-count">${cards.length}</span>
-          <span class="cc-title">${st.title}</span>
+          <span class="cc-title">${esc(st.title)}</span>
           <span class="cc-icon">▸</span>
         </div>
       </div>`;
     }
-    const canL = i > 0, canR = i < stages.length - 1;
-    return `<div class="pipe-col" data-stage-id="${st.id}" style="--pipe-color:${st.color}">
+    const canL = i > 0, canR = i < baseStages.length - 1;
+    const del = st.builtin ? '' : `<button class="col-btn" onclick="deleteStage('${st.id}')" title="Delete stage" style="color:var(--hot)">✕</button>`;
+    return `<div class="pipe-col" data-stage-id="${st.id}" style="--pipe-color:${safeColor(st.color)}">
       <div class="pipe-col-head">
-        <span class="t">${st.title}</span>
+        <span class="t">${esc(st.title)}</span>
         <span class="n">${cards.length}</span>
         <span class="col-actions">
           <button class="col-btn" ${canL?'':'disabled'} onclick="moveStage('${st.id}',-1)" title="Move left">‹</button>
           <button class="col-btn" ${canR?'':'disabled'} onclick="moveStage('${st.id}',1)" title="Move right">›</button>
           <button class="col-btn" onclick="toggleStageCollapse('${st.id}')" title="Minimize">–</button>
+          ${del}
         </span>
       </div>
       <div class="pipe-col-body" ondragover="pipeDragOver(event)" ondragleave="pipeDragLeave(event)" ondrop="pipeDrop(event,'${st.id}')">
         ${cards.length ? cards.map(pipeCard).join('') : '<div class="pipe-empty">Drop leads here</div>'}
       </div>
     </div>`;
-  }).join('') + `</div>`;
+  }).join('') + `<button class="add-stage-btn" onclick="openStageModal()">＋ Add Stage</button></div>`;
 }
 
 function pipeCard(r) {
@@ -358,11 +432,12 @@ function pipeCard(r) {
       ${rating}
     </div>
     <div class="foot">
-      ${r.phone ? `<a href="tel:${r.phone}">${esc(r.phone)}</a>` : ''}
-      ${r.email ? `<a href="mailto:${r.email}">✉️</a>` : ''}
+      ${r.phone ? `<a href="tel:${attrEsc(r.phone)}">${esc(r.phone)}</a><button class="copy-btn" title="Copy number" onclick="event.stopPropagation();copyText('${jsq(r.phone)}', this)">📋</button>` : ''}
+      ${r.email ? `<a href="mailto:${attrEsc(r.email)}">✉️</a>` : ''}
       <button class="claim-btn ${isClaimed?'claimed':''}" style="margin-left:auto" onclick="toggleClaim('${r.id}', this)">${isClaimed?'✓ Claimed':'Claim'}</button>
       <button class="claim-btn" onclick="blacklistLead('${r.id}', this)" title="Denied by contractor — blacklist" style="color:#f2a33c">⛔</button>
     </div>
+    <input class="notes-input" data-note-id="${r.id}" draggable="false" placeholder="Add note…" value="${esc(r.notes||'').replace(/"/g,'&quot;')}" onpointerdown="event.stopPropagation(); this.closest('.pipe-card').draggable=false" onblur="this.closest('.pipe-card').draggable=true; saveNote('${r.id}', this.value)"/>
   </div>`;
 }
 
@@ -384,10 +459,16 @@ async function pipeDrop(e, stage) {
 async function setStatus(id, status) {
   const lead = allLeads.find(r => r.id === id);
   if (!lead) return;
+  const prev = lead.status;
   lead.status = status;
-  const { error } = await supabaseClient.from('contractor_leads').update({ status }).eq('id', id);
-  if (error) { console.error('setStatus', error); return; }
   applyFilters();
+  const { error } = await supabaseClient.from('contractor_leads').update({ status }).eq('id', id);
+  if (error) {
+    console.error('setStatus', error);
+    lead.status = prev;          // revert so the UI matches the DB
+    applyFilters();
+    alert('Could not move this lead — the database rejected that stage. If it is a custom stage, the status column may not accept it.');
+  }
 }
 
 function sortBy(col) {
@@ -416,16 +497,15 @@ function renderTable(rows) {
       <td>${ratingHtml}</td>
       <td>
         <select class="status-sel st-${status}" onchange="setStatus('${row.id}', this.value)">
-          <option value="new"       ${status==='new'      ?'selected':''}>New</option>
-          <option value="contacted" ${status==='contacted'?'selected':''}>Contacted</option>
-          <option value="qualified" ${status==='qualified'?'selected':''}>Qualified</option>
-          <option value="closed"    ${status==='closed'   ?'selected':''}>Closed</option>
+          ${getAllStages().some(s=>s.id===status)?'':`<option value="${attrEsc(status)}" selected>${esc(status)} (?)</option>`}
+          ${getAllStages().map(s=>`<option value="${s.id}" ${status===s.id?'selected':''}>${esc(s.title)}</option>`).join('')}
         </select>
       </td>
-      <td class="phone">${row.phone?`<a href="tel:${row.phone}">${esc(row.phone)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
-      <td class="email-cell">${row.email?`<a href="mailto:${row.email}">${esc(row.email)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
-      <td class="web">${row.website?`<a href="${esc(row.website)}" target="_blank">${shortUrl(row.website)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="phone">${row.phone?`<span class="phone-wrap"><a href="tel:${attrEsc(row.phone)}">${esc(row.phone)}</a><button class="copy-btn" title="Copy number" onclick="copyText('${jsq(row.phone)}', this)">📋</button></span>`:'<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="email-cell">${row.email?`<a href="mailto:${attrEsc(row.email)}">${esc(row.email)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="web">${row.website?`<a href="${attrEsc(row.website)}" target="_blank">${shortUrl(row.website)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
       <td class="addr">${esc(row.address||'')}</td>
+      <td class="notes-cell"><input class="notes-input" data-note-id="${row.id}" placeholder="Add note…" value="${esc(row.notes||'').replace(/"/g,'&quot;')}" onblur="saveNote('${row.id}', this.value)"/></td>
       <td class="date">${savedDate}</td>
       <td style="white-space:nowrap"><button class="btn btn-sm" onclick="blacklistLead('${row.id}', this)" title="Denied by contractor — blacklist so it never returns in scans" style="color:#f2a33c;border-color:transparent">⛔</button><button class="btn btn-sm btn-danger" onclick="deleteLead('${row.id}', this)" title="Delete (can reappear on re-scan)">✕</button></td>`;
     tbody.appendChild(tr);
@@ -497,7 +577,68 @@ function exportCSV() {
 }
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+function attrEsc(s){ return esc(s).replace(/"/g,'&quot;'); }                 // safe inside a double-quoted HTML attribute
+function jsq(s){ return (s||'').toString().replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); } // single-quoted JS string inside a double-quoted attribute
+function safeColor(c){ return /^#[0-9a-fA-F]{3,8}$/.test(c||'') ? c : '#8a8f98'; }
 function shortUrl(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return u; } }
+
+// Copy a phone number (or any text) to the clipboard, with quick ✓ feedback.
+async function copyText(text, btn){
+  try { await navigator.clipboard.writeText(text); }
+  catch(e){ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} ta.remove(); }
+  if(btn){
+    if(btn._copyTimer) clearTimeout(btn._copyTimer); else btn._copyOrig = btn.textContent;
+    btn.textContent='✓'; btn.classList.add('copied');
+    btn._copyTimer = setTimeout(()=>{ btn.textContent=btn._copyOrig; btn.classList.remove('copied'); btn._copyTimer=null; }, 1200);
+  }
+}
+
+// Save a shared note on a contractor lead (visible to the whole team).
+async function saveNote(id, value){
+  const lead = allLeads.find(r=>r.id===id);
+  if(!lead) return;
+  const v = value.trim() || null;
+  if((lead.notes||null) === v) return; // unchanged
+  lead.notes = v;
+  const { error } = await supabaseClient.from('contractor_leads').update({ notes: v }).eq('id', id);
+  if(error) console.error('saveNote', error);
+}
+
+// ── Add / delete custom pipeline stages ──
+let _stageColor = '#5e6ad2';
+function pickStageColor(el){ document.querySelectorAll('#stageColors .swatch').forEach(s=>s.classList.remove('sel')); el.classList.add('sel'); _stageColor = el.dataset.c; }
+function openStageModal(){
+  _stageColor = '#5e6ad2';
+  document.querySelectorAll('#stageColors .swatch').forEach((s,i)=>s.classList.toggle('sel', i===0));
+  document.getElementById('stageName').value='';
+  document.getElementById('stageModalOverlay').style.display='flex';
+  setTimeout(()=>document.getElementById('stageName').focus(), 0);
+}
+function closeStageModal(){ document.getElementById('stageModalOverlay').style.display='none'; }
+async function saveStage(){
+  const title = document.getElementById('stageName').value.trim();
+  if(!title){ alert('Give the stage a name.'); return; }
+  const id = 'cs_' + title.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'') + '_' + Date.now().toString(36);
+  customStages.push({ id, title, color:_stageColor });
+  await saveCustomStages();
+  closeStageModal();
+  populateStatusFilter();
+  applyFilters();
+}
+async function deleteStage(id){
+  const st = customStages.find(s=>s.id===id);
+  if(!st) return;
+  const inStage = allLeads.filter(l=>(l.status||'')===id);
+  if(!confirm(`Delete stage "${st.title}"?${inStage.length?` ${inStage.length} lead(s) in it will move back to New.`:''}`)) return;
+  customStages = customStages.filter(s=>s.id!==id);
+  await saveCustomStages();
+  if(inStage.length){
+    inStage.forEach(l=>l.status='new');
+    await supabaseClient.from('contractor_leads').update({status:'new'}).eq('status', id);
+  }
+  populateStatusFilter();
+  applyFilters();
+}
 
 // ── Live team sync (always on) ──
 // Supabase realtime on contractor_leads so status moves, new scans, and deletes
@@ -508,14 +649,22 @@ function scheduleLiveRender() {
   _liveTimer = setTimeout(runLiveRender, 250);
 }
 function runLiveRender() {
-  // Don't clobber a dropdown/field the user is mid-interaction with.
   const a = document.activeElement;
-  if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) {
+  const isNote = a && a.classList && a.classList.contains('notes-input');
+  // A filter box or an open status <select> mid-interaction — defer briefly so we don't disrupt it.
+  if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && !isNote) {
     clearTimeout(_liveTimer);
     _liveTimer = setTimeout(runLiveRender, 1500);
     return;
   }
+  // A note being edited: keep the board live, but preserve the in-progress text + caret.
+  let restore = null;
+  if (isNote) restore = { id: a.dataset.noteId, val: a.value, s: a.selectionStart, e: a.selectionEnd };
   applyFilters();
+  if (restore && restore.id) {
+    const el = document.querySelector('.notes-input[data-note-id="' + restore.id + '"]');
+    if (el) { el.value = restore.val; el.focus(); try { el.setSelectionRange(restore.s, restore.e); } catch(_){} }
+  }
 }
 function startLiveSync() {
   supabaseClient.channel('contractor-leads-live')
@@ -538,10 +687,34 @@ function startLiveSync() {
 (async function init(){
   await requireAuth();
   document.getElementById('userLabel').textContent = await getUserName();
+  try { await loadCustomStages(); } catch(e){ console.warn('custom stages load failed', e); customStages = []; }
+  populateStatusFilter();
   await loadLeads();
   setView(currentView);
   startLiveSync();
 })();
 </script>
+
+<div id="stageModalOverlay" class="modal-overlay" onclick="if(event.target===this)closeStageModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeStageModal()">✕</button>
+    <h3>New Pipeline Stage</h3>
+    <label>Stage name
+      <input id="stageName" placeholder="e.g. Follow Up, Quoted, Booked" onkeydown="if(event.key==='Enter')saveStage()"/>
+    </label>
+    <div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Color</div>
+      <div id="stageColors" class="stage-colors">
+        <span class="swatch sel" data-c="#5e6ad2" style="background:#5e6ad2" onclick="pickStageColor(this)"></span>
+        <span class="swatch" data-c="#f2a33c" style="background:#f2a33c" onclick="pickStageColor(this)"></span>
+        <span class="swatch" data-c="#3dd68c" style="background:#3dd68c" onclick="pickStageColor(this)"></span>
+        <span class="swatch" data-c="#f47067" style="background:#f47067" onclick="pickStageColor(this)"></span>
+        <span class="swatch" data-c="#38bdf8" style="background:#38bdf8" onclick="pickStageColor(this)"></span>
+        <span class="swatch" data-c="#e879f9" style="background:#e879f9" onclick="pickStageColor(this)"></span>
+      </div>
+    </div>
+    <button class="btn btn-accent" onclick="saveStage()">＋ Create Stage</button>
+  </div>
+</div>
 </body>
 </html>
