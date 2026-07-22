@@ -227,7 +227,7 @@ td.rating{white-space:nowrap;}
     <div class="table-wrap">
       <div class="empty-state" id="emptyState">
         <div class="icon">🏠</div>
-        <p>Click counties on the Florida map, then hit Scan</p>
+        <p id="emptyMsg">Click counties on the Florida map, then hit Scan</p>
       </div>
       <table id="resultsTable" style="display:none">
         <thead>
@@ -683,6 +683,12 @@ function setMapMode(mode){
   document.getElementById('flMap').style.display = storm ? 'none' : '';
   document.getElementById('mapModeCounties').classList.toggle('active', !storm);
   document.getElementById('mapModeStorm').classList.toggle('active', storm);
+  if (!results.length) {
+    const em = document.getElementById('emptyMsg');
+    const rc = document.getElementById('resultCount');
+    if (em) em.textContent = storm ? 'Hit “Scan Warned Area” on the storm map to find contractors in the warning zone' : 'Click counties on the Florida map, then hit Scan';
+    if (rc) rc.textContent = storm ? 'Storm map — scan the warned area' : 'Click counties on the map, then Scan';
+  }
   if (storm) initStormMap();
 }
 
@@ -770,7 +776,7 @@ async function scanWarnedArea(){
   if (!types.length){ alert('Select at least one contractor type first (top of the panel).'); return; }
   if (!stormWarnings.features.length){ alert('There are no active storm-warning areas to scan right now.'); return; }
   const force = document.getElementById('forceRescan').checked;
-  const step = 0.35; // ~38 km grid
+  const step = 0.45; // ~50 km grid — each point already scans a 30 km radius, so a finer grid just burns API calls on overlapping ground
   const seen = new Set(); const pts = [];
   for (const f of stormWarnings.features){
     if (!f.geometry) continue;
@@ -786,10 +792,11 @@ async function scanWarnedArea(){
     }
   }
   if (!pts.length){ alert('Could not build scan points from the warning areas.'); return; }
-  const MAX = 90;
+  const MAX = 60; // cap to keep API usage bounded across a big warned coastline
   let scanPts = pts;
   if (pts.length > MAX){ const nth = Math.ceil(pts.length/MAX); scanPts = pts.filter((_,i)=>i%nth===0); }
-  if (!confirm(`🌀 Scan the storm-warning area?\n${scanPts.length} scan points across the warned coastline × ${types.length} type(s).\nEach point makes Google API calls.`)) return;
+  const nsCalls = scanPts.length * types.length;
+  if (!confirm(`🌀 Scan the storm-warning area?\n\n${scanPts.length} coverage points × ${types.length} type(s)\n≈ ${nsCalls} Google Nearby Searches (plus Place Details per company found).\n\nProceed?`)) return;
   await executeScan(scanPts, types, force);
 }
 
