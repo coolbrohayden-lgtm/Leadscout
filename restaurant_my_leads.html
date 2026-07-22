@@ -53,6 +53,10 @@ td.name a:hover{color:var(--accent);}
 .label-new{color:var(--muted);}
 td.phone a{color:var(--text);text-decoration:none;white-space:nowrap;}
 td.phone a:hover{color:var(--accent);}
+.phone-wrap{display:inline-flex;align-items:center;gap:5px;}
+.copy-btn{border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;line-height:1;cursor:pointer;border-radius:5px;padding:3px 6px;font-family:inherit;transition:all .12s;}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent);}
+.copy-btn.copied{border-color:var(--cold,#3dd68c);color:var(--cold,#3dd68c);}
 td.email-cell a{color:var(--accent);text-decoration:none;font-size:11px;}
 td.web a{color:var(--accent);text-decoration:none;font-size:11px;max-width:130px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 td.addr{color:var(--muted);font-size:11px;max-width:140px;}
@@ -214,7 +218,7 @@ function renderTable(rows) {
       <td class="name">${row.website ? `<a href="${esc(row.website)}" target="_blank">${esc(row.name||'')}</a>` : esc(row.name||'')}</td>
       <td style="color:var(--muted);white-space:nowrap">${bizLabel}</td>
       <td><span class="label-badge ${labelClass}">${labelText}</span></td>
-      <td class="phone">${row.phone ? `<a href="tel:${row.phone}">${esc(row.phone)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
+      <td class="phone">${row.phone ? `<span class="phone-wrap"><a href="tel:${esc(row.phone).replace(/"/g,'&quot;')}">${esc(row.phone)}</a><button class="copy-btn" title="Copy number" onclick="copyText('${jsq(row.phone)}', this)">📋</button></span>` : '<span style="color:var(--muted2)">—</span>'}</td>
       <td class="email-cell">${row.business_email ? `<a href="mailto:${row.business_email}">${esc(row.business_email)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
       <td class="web">${row.website ? `<a href="${esc(row.website)}" target="_blank">${shortUrl(row.website)}</a>` : '<span style="color:var(--muted2)">—</span>'}</td>
       <td class="addr">${esc(row.address||'')}</td>
@@ -281,6 +285,16 @@ function exportCSV() {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function shortUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch(e) { return u; } }
+function jsq(s){ return (s||'').toString().replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+async function copyText(text, btn){
+  try { await navigator.clipboard.writeText(text); }
+  catch(e){ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} ta.remove(); }
+  if(btn){
+    if(btn._copyTimer) clearTimeout(btn._copyTimer); else btn._copyOrig = btn.textContent;
+    btn.textContent='✓'; btn.classList.add('copied');
+    btn._copyTimer = setTimeout(()=>{ btn.textContent=btn._copyOrig; btn.classList.remove('copied'); btn._copyTimer=null; }, 1200);
+  }
+}
 
 (async function init() {
   await requireAuth();

@@ -282,6 +282,9 @@ tr:hover td{background:rgba(108,99,255,.04);}
 .icon-btn.danger:hover{border-color:var(--hot);color:var(--hot);background:rgba(244,112,103,.08);}
 .icon-btn.claimed{border-color:var(--accent);color:var(--accent-hover);background:var(--accent-soft);}
 .action-row{display:flex;gap:4px;align-items:center;}
+.copy-btn{border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:10px;line-height:1;cursor:pointer;border-radius:5px;padding:2px 5px;font-family:inherit;margin-left:5px;vertical-align:middle;transition:all .12s;}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent-hover);}
+.copy-btn.copied{border-color:var(--cold);color:var(--cold);}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="/auth.js"></script>
@@ -855,7 +858,7 @@ function render(){
       const scanDate=fmtDate(l.scanned_at);
       const ownerHtml = l.owner_name
         ? `<div style="font-size:11px;font-weight:600">${l.owner_name}</div>
-           ${l.owner_phone?`<div style="font-size:10px;color:var(--accent)">${fmtPhone(l.owner_phone)}</div>`:''}
+           ${l.owner_phone?`<div style="font-size:10px;color:var(--accent)">${fmtPhone(l.owner_phone)}${phoneCopyBtn(l.owner_phone)}</div>`:''}
            ${l.owner_email?`<div style="font-size:10px;color:var(--muted)">${l.owner_email}</div>`:''}
            <div style="font-size:9px;color:var(--muted);margin-top:1px">${l.owner_source||''}</div>
            <button class="btn" style="font-size:8px;padding:1px 5px;margin-top:2px;opacity:0.5" onclick="clearOwner('${l.place_id}')">✕ Clear</button>`
@@ -885,7 +888,7 @@ function render(){
         </td>
         <td style="color:var(--muted);max-width:180px">${l.address||''} ${website}</td>
         <td style="white-space:nowrap">
-          ${fmtPhone(l.phone)}
+          ${fmtPhone(l.phone)}${phoneCopyBtn(l.phone)}
           ${l.business_email?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><a href="mailto:${l.business_email}" style="color:var(--muted);text-decoration:none">✉️ ${l.business_email}</a></div>`:''}
         </td>
         <td style="min-width:140px" id="owner-${l.place_id}">${ownerHtml}</td>
@@ -1741,6 +1744,19 @@ function fmtPhone(raw) {
   const display = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
   return `<a href="tel:+1${digits}" style="color:inherit;text-decoration:none">${display}</a>`;
 }
+
+// Copy a phone number to the clipboard (callers dial from their laptop).
+function jsq(s){ return (s||'').toString().replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+async function copyText(text, btn){
+  try { await navigator.clipboard.writeText(text); }
+  catch(e){ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); try{document.execCommand('copy');}catch(_){} ta.remove(); }
+  if(btn){
+    if(btn._copyTimer) clearTimeout(btn._copyTimer); else btn._copyOrig = btn.textContent;
+    btn.textContent='✓'; btn.classList.add('copied');
+    btn._copyTimer = setTimeout(()=>{ btn.textContent=btn._copyOrig; btn.classList.remove('copied'); btn._copyTimer=null; }, 1200);
+  }
+}
+function phoneCopyBtn(phone){ return phone?`<button class="copy-btn" title="Copy number" onclick="event.stopPropagation();copyText('${jsq(phone)}', this)">📋</button>`:''; }
 
 function fmtDate(input) {
   if (!input) return '';
