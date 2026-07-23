@@ -128,6 +128,8 @@ td.notes-cell{min-width:150px;max-width:200px;}
 .notes-input{background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:11px;font-family:inherit;width:100%;padding:3px 0;outline:none;transition:border .15s;}
 .notes-input:focus{border-bottom-color:var(--accent);}
 .notes-input::placeholder{color:var(--muted2);}
+.notes-input.note-saved{border-color:var(--green-light)!important;border-bottom-color:var(--green-light)!important;background:rgba(61,214,140,.1);transition:all .2s;}
+.notes-input.note-error{border-color:var(--hot)!important;border-bottom-color:var(--hot)!important;background:rgba(244,112,103,.1);}
 .pipe-card .notes-input{border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 7px;margin-top:6px;background:var(--surface);}
 
 /* Add-stage button + stage delete */
@@ -314,7 +316,26 @@ async function saveCustomStages() {
   const { error } = await supabaseClient.from('shared_settings').upsert({ id: 1, contractor_pipeline_stages: JSON.stringify(customStages) });
   if (error) console.warn('Custom stages saved to this browser only — add a contractor_pipeline_stages (text) column to shared_settings to share them with the team:', error.message);
 }
-function getAllStages() { return [...PIPE_STAGES, ...customStages]; }
+function stageNameFromId(id){
+  // cs_<slug>_<base36 time>  ->  "Slug Words"
+  let s = String(id).replace(/^cs_/,'').replace(/_[a-z0-9]+$/,'').replace(/_/g,' ').trim();
+  return s ? s.replace(/\b\w/g, c=>c.toUpperCase()) : id;
+}
+function getAllStages() {
+  const list = [...PIPE_STAGES, ...customStages];
+  const ids = new Set(list.map(s=>s.id));
+  // Derive stages from custom-stage ids already saved on leads (shared through the DB),
+  // so a stage created on one teammate's screen shows — by name — on everyone else's,
+  // even before the shared_settings column exists.
+  for (const lead of allLeads) {
+    const st = lead.status;
+    if (st && String(st).startsWith('cs_') && !ids.has(st)) {
+      ids.add(st);
+      list.push({ id: st, title: stageNameFromId(st), color: '#8b96e8', derived: true });
+    }
+  }
+  return list;
+}
 function populateStatusFilter(){
   const sel = document.getElementById('filterStatus');
   if(!sel) return;
@@ -437,7 +458,7 @@ function pipeCard(r) {
       <button class="claim-btn ${isClaimed?'claimed':''}" style="margin-left:auto" onclick="toggleClaim('${r.id}', this)">${isClaimed?'✓ Claimed':'Claim'}</button>
       <button class="claim-btn" onclick="blacklistLead('${r.id}', this)" title="Denied by contractor — blacklist" style="color:#f2a33c">⛔</button>
     </div>
-    <input class="notes-input" data-note-id="${r.id}" draggable="false" placeholder="Add note…" value="${esc(r.notes||'').replace(/"/g,'&quot;')}" onpointerdown="event.stopPropagation(); this.closest('.pipe-card').draggable=false" onblur="this.closest('.pipe-card').draggable=true; saveNote('${r.id}', this.value)"/>
+    <input class="notes-input" data-note-id="${r.id}" draggable="false" placeholder="Note — Enter to save" value="${esc(r.notes||'').replace(/"/g,'&quot;')}" onpointerdown="event.stopPropagation(); this.closest('.pipe-card').draggable=false" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="this.closest('.pipe-card').draggable=true; saveNote('${r.id}', this.value, this)"/>
   </div>`;
 }
 
@@ -505,7 +526,7 @@ function renderTable(rows) {
       <td class="email-cell">${row.email?`<a href="mailto:${attrEsc(row.email)}">${esc(row.email)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
       <td class="web">${row.website?`<a href="${attrEsc(row.website)}" target="_blank">${shortUrl(row.website)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
       <td class="addr">${esc(row.address||'')}</td>
-      <td class="notes-cell"><input class="notes-input" data-note-id="${row.id}" placeholder="Add note…" value="${esc(row.notes||'').replace(/"/g,'&quot;')}" onblur="saveNote('${row.id}', this.value)"/></td>
+      <td class="notes-cell"><input class="notes-input" data-note-id="${row.id}" placeholder="Note — Enter to save" value="${esc(row.notes||'').replace(/"/g,'&quot;')}" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="saveNote('${row.id}', this.value, this)"/></td>
       <td class="date">${savedDate}</td>
       <td style="white-space:nowrap"><button class="btn btn-sm" onclick="blacklistLead('${row.id}', this)" title="Denied by contractor — blacklist so it never returns in scans" style="color:#f2a33c;border-color:transparent">⛔</button><button class="btn btn-sm btn-danger" onclick="deleteLead('${row.id}', this)" title="Delete (can reappear on re-scan)">✕</button></td>`;
     tbody.appendChild(tr);
@@ -594,14 +615,15 @@ async function copyText(text, btn){
 }
 
 // Save a shared note on a contractor lead (visible to the whole team).
-async function saveNote(id, value){
+async function saveNote(id, value, el){
   const lead = allLeads.find(r=>r.id===id);
   if(!lead) return;
   const v = value.trim() || null;
-  if((lead.notes||null) === v) return; // unchanged
+  if((lead.notes||null) === v){ if(el){ el.classList.add('note-saved'); setTimeout(()=>el.classList.remove('note-saved'),900);} return; } // unchanged — still flash so the user sees it "took"
   lead.notes = v;
   const { error } = await supabaseClient.from('contractor_leads').update({ notes: v }).eq('id', id);
-  if(error) console.error('saveNote', error);
+  if(error){ console.error('saveNote', error); if(el){ el.classList.add('note-error'); setTimeout(()=>el.classList.remove('note-error'),1500);} return; }
+  if(el){ el.classList.add('note-saved'); setTimeout(()=>el.classList.remove('note-saved'), 900); }
 }
 
 // ── Add / delete custom pipeline stages ──
@@ -626,8 +648,8 @@ async function saveStage(){
   applyFilters();
 }
 async function deleteStage(id){
-  const st = customStages.find(s=>s.id===id);
-  if(!st) return;
+  const st = getAllStages().find(s=>s.id===id);
+  if(!st || st.builtin) return;
   const inStage = allLeads.filter(l=>(l.status||'')===id);
   if(!confirm(`Delete stage "${st.title}"?${inStage.length?` ${inStage.length} lead(s) in it will move back to New.`:''}`)) return;
   customStages = customStages.filter(s=>s.id!==id);
@@ -688,8 +710,8 @@ function startLiveSync() {
   await requireAuth();
   document.getElementById('userLabel').textContent = await getUserName();
   try { await loadCustomStages(); } catch(e){ console.warn('custom stages load failed', e); customStages = []; }
-  populateStatusFilter();
   await loadLeads();
+  populateStatusFilter();   // after leads load so derived custom stages appear in the filter
   setView(currentView);
   startLiveSync();
 })();
