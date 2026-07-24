@@ -130,6 +130,15 @@ td.notes-cell{min-width:150px;max-width:200px;}
 .notes-input::placeholder{color:var(--muted2);}
 .notes-input.note-saved{border-color:var(--green-light)!important;border-bottom-color:var(--green-light)!important;background:rgba(61,214,140,.1);transition:all .2s;}
 .notes-input.note-error{border-color:var(--hot)!important;border-bottom-color:var(--hot)!important;background:rgba(244,112,103,.1);}
+
+/* Reminder / follow-up date */
+.followup-input{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:10px;font-family:inherit;padding:2px 5px;outline:none;color-scheme:dark;}
+.followup-input:hover{border-color:var(--border-light);}
+.followup-input:focus{border-color:var(--accent);}
+.fu-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px;margin-left:5px;white-space:nowrap;}
+.fu-overdue{background:rgba(244,112,103,.16);color:var(--hot);}
+.fu-today{background:rgba(255,180,50,.16);color:#ffb432;}
+.fu-upcoming{background:var(--surface3);color:var(--muted);}
 .pipe-card .notes-input{border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 7px;margin-top:6px;background:var(--surface);}
 
 /* Add-stage button + stage delete */
@@ -206,6 +215,7 @@ td.notes-cell{min-width:150px;max-width:200px;}
         <th class="no-sort">Website</th>
         <th class="no-sort">Address</th>
         <th class="no-sort">Notes</th>
+        <th class="no-sort">⏰ Reminder</th>
         <th onclick="sortBy('saved_at')">Saved</th>
         <th class="no-sort"></th>
       </tr>
@@ -300,21 +310,17 @@ const PIPE_STAGES = [
 
 // ── Custom stages (shared with the team via shared_settings.contractor_pipeline_stages) ──
 let customStages = [];
+// Custom stages are stored per-browser (localStorage). We deliberately DON'T
+// write them to a shared row — a shared array gets clobbered when two teammates
+// add stages at once (last write wins → stages "disappear"). Instead, any stage
+// that actually holds a lead is shared automatically: getAllStages() derives it
+// from the lead's saved status id (see above), which can't be clobbered.
 async function loadCustomStages() {
-  try {
-    const { data, error } = await supabaseClient.from('shared_settings').select('contractor_pipeline_stages').eq('id', 1).single();
-    if (error) throw error;
-    try { customStages = JSON.parse(data?.contractor_pipeline_stages || '[]'); } catch(_) { customStages = []; }
-  } catch (e) {
-    try { customStages = JSON.parse(localStorage.getItem('contractor_custom_stages') || '[]'); } catch(_) { customStages = []; }
-  }
+  try { customStages = JSON.parse(localStorage.getItem('contractor_custom_stages') || '[]'); } catch(_) { customStages = []; }
   if (!Array.isArray(customStages)) customStages = [];
 }
 async function saveCustomStages() {
-  localStorage.setItem('contractor_custom_stages', JSON.stringify(customStages));
-  // upsert (not update+eq) so it also works if the shared_settings id=1 row doesn't exist yet
-  const { error } = await supabaseClient.from('shared_settings').upsert({ id: 1, contractor_pipeline_stages: JSON.stringify(customStages) });
-  if (error) console.warn('Custom stages saved to this browser only — add a contractor_pipeline_stages (text) column to shared_settings to share them with the team:', error.message);
+  try { localStorage.setItem('contractor_custom_stages', JSON.stringify(customStages)); } catch(_){}
 }
 function stageNameFromId(id){
   // cs_<slug>_<base36 time>  ->  "Slug Words"
@@ -458,6 +464,11 @@ function pipeCard(r) {
       <button class="claim-btn ${isClaimed?'claimed':''}" style="margin-left:auto" onclick="toggleClaim('${r.id}', this)">${isClaimed?'✓ Claimed':'Claim'}</button>
       <button class="claim-btn" onclick="blacklistLead('${r.id}', this)" title="Denied by contractor — blacklist" style="color:#f2a33c">⛔</button>
     </div>
+    <div style="margin-top:6px;display:flex;align-items:center;gap:5px">
+      <span style="font-size:11px" title="Set a reminder">⏰</span>
+      <input class="followup-input" type="date" draggable="false" value="${getFollowup(r.id)}" onpointerdown="event.stopPropagation()" onchange="saveFollowup('${r.id}', this.value)"/>
+      ${followupBadge(getFollowup(r.id))}
+    </div>
     <input class="notes-input" data-note-id="${r.id}" draggable="false" placeholder="Note — Enter to save" value="${esc(r.notes||'').replace(/"/g,'&quot;')}" onpointerdown="event.stopPropagation(); this.closest('.pipe-card').draggable=false" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="this.closest('.pipe-card').draggable=true; saveNote('${r.id}', this.value, this)"/>
   </div>`;
 }
@@ -527,6 +538,7 @@ function renderTable(rows) {
       <td class="web">${row.website?`<a href="${attrEsc(row.website)}" target="_blank">${shortUrl(row.website)}</a>`:'<span style="color:var(--muted2)">—</span>'}</td>
       <td class="addr">${esc(row.address||'')}</td>
       <td class="notes-cell"><input class="notes-input" data-note-id="${row.id}" placeholder="Note — Enter to save" value="${esc(row.notes||'').replace(/"/g,'&quot;')}" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="saveNote('${row.id}', this.value, this)"/></td>
+      <td style="white-space:nowrap"><input class="followup-input" type="date" value="${getFollowup(row.id)}" onchange="saveFollowup('${row.id}', this.value)"/>${followupBadge(getFollowup(row.id))}</td>
       <td class="date">${savedDate}</td>
       <td style="white-space:nowrap"><button class="btn btn-sm" onclick="blacklistLead('${row.id}', this)" title="Denied by contractor — blacklist so it never returns in scans" style="color:#f2a33c;border-color:transparent">⛔</button><button class="btn btn-sm btn-danger" onclick="deleteLead('${row.id}', this)" title="Delete (can reappear on re-scan)">✕</button></td>`;
     tbody.appendChild(tr);
@@ -624,6 +636,24 @@ async function saveNote(id, value, el){
   const { error } = await supabaseClient.from('contractor_leads').update({ notes: v }).eq('id', id);
   if(error){ console.error('saveNote', error); if(el){ el.classList.add('note-error'); setTimeout(()=>el.classList.remove('note-error'),1500);} return; }
   if(el){ el.classList.add('note-saved'); setTimeout(()=>el.classList.remove('note-saved'), 900); }
+}
+
+// ── Reminders (follow-up date) — stored per-caller in this browser, no setup needed ──
+function getFollowup(id){ try{ return localStorage.getItem('cl_fu_'+id) || ''; }catch(_){ return ''; } }
+function saveFollowup(id, date){
+  try{ if(date) localStorage.setItem('cl_fu_'+id, date); else localStorage.removeItem('cl_fu_'+id); }catch(_){}
+  applyFilters();
+}
+function followupBadge(dateStr){
+  if(!dateStr) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr+'T00:00:00');
+  if(isNaN(d)) return '';
+  const diff = Math.round((d - today)/86400000);
+  if(diff < 0)  return '<span class="fu-badge fu-overdue">Overdue</span>';
+  if(diff === 0) return '<span class="fu-badge fu-today">Today</span>';
+  if(diff <= 7) return `<span class="fu-badge fu-upcoming">in ${diff}d</span>`;
+  return '';
 }
 
 // ── Add / delete custom pipeline stages ──
